@@ -1,3 +1,27 @@
+/* =====================================================================
+   Essex Solutions — Returning-lead autofill (server-side lookup)
+   ---------------------------------------------------------------------
+   Loaded on /contact via jsDelivr alongside essex-email-autofill.css.
+
+   v2 — NO Jetboost, NO on-page collection list. The email is sent to our
+   own edge API (/api/contact-lookup on Webflow Cloud) which returns ONLY
+   the single matching contact, or nothing. Contact PII is never shipped
+   to the browser, there is no 100-item limit, and nothing can disable the
+   form's Submit button (that was the old Jetboost search-input bug).
+
+   ON THE WEBFLOW PAGE you must also:
+     • Delete the Jetboost results Collection List from /contact.
+     • Remove the `jetboost-list-search-input-6xn5` class from #Email.
+
+   WHAT IT DOES:
+     • On a complete, valid email (debounced) -> GET /api/contact-lookup.
+     • Match  -> autofills Organization / First / Last / City / Phone (text)
+                 and selects the Role / Region radios; shows a green check.
+     • No match -> validates "work email only" (rejects free/disposable),
+                 fills nothing (new lead).
+     • Editing the email away from a match instantly clears the autofilled
+       values — but never wipes what a brand-new lead typed themselves.
+   ===================================================================== */
 (function () {
   "use strict";
   if (window.__essexLeadAutofill) return;        // guard against double-injection
@@ -7,24 +31,27 @@
      1) CONFIG — edit selectors / field map here if your DOM changes
   ------------------------------------------------------------------ */
   var CFG = {
-    emailInput:  "#Email",                                  // Jetboost search input = contact email
-    listWrapper: ".jetboost-list-wrapper-6xn5",             // Jetboost results container
-    leadCard:    ".lead_card, .jetboost-list-item, .w-dyn-item", // one lead row
+    // Same-origin path to the Webflow Cloud app (mount path = /api).
+    // The script may be served from jsDelivr, but it RUNS on the Webflow
+    // page, so this relative URL resolves to essexsolutions.webflow.io/api/...
+    lookupUrl:   "/api/contact-lookup",
 
-    // data-attribute on the lead card  ->  form field to fill
+    emailInput:  "#Email",                       // contact email field
+
+    // lookup JSON key  ->  form field
     fields: [
-      { attr: "data-lead-org",    sel: "#Organization", kind: "text"  },
-      { attr: "data-lead-first",  sel: "#First-Name",   kind: "text"  },
-      { attr: "data-lead-last",   sel: "#Last-Name",    kind: "text"  },
-      { attr: "data-lead-city",   sel: "#City",         kind: "text"  },
-      { attr: "data-lead-phone",  sel: "#Phone",        kind: "text"  },
-      { attr: "data-lead-role",   sel: "role",          kind: "radio" }, // radio group name=
-      { attr: "data-lead-region", sel: "region",        kind: "radio" }
+      { key: "organization", sel: "#Organization", kind: "text"  },
+      { key: "firstName",    sel: "#First-Name",   kind: "text"  },
+      { key: "lastName",     sel: "#Last-Name",    kind: "text"  },
+      { key: "city",         sel: "#City",         kind: "text"  },
+      { key: "phone",        sel: "#Phone",        kind: "text"  },
+      { key: "role",         sel: "role",          kind: "radio" }, // radio group name=
+      { key: "region",       sel: "region",        kind: "radio" }
     ],
 
-    radioActiveClass: "is-active-inputactive",  // label class your design adds when a radio is selected
-    debounceMs: 550,                            // idle wait after typing STOPS before checking for a match
-    blockSubmitOnInvalid: false,                // true = also stop form submit on a non-work email
+    radioActiveClass: "is-active-inputactive",   // label class your design adds when a radio is selected
+    debounceMs: 400,                             // idle wait after typing STOPS before the lookup
+    blockSubmitOnInvalid: false,                 // true = also stop form submit on a non-work email
 
     lists: {
       free:               "https://cdn.jsdelivr.net/npm/free-email-domains/domains.json",
@@ -144,7 +171,7 @@
     // events
     var t;
     emailInput.addEventListener("input", function () {
-      // If they edit away from the matched email, pull the revealed data
+      // If they edit away from the matched email, clear the revealed data
       // IMMEDIATELY (don't wait out the idle timer) so nothing lingers.
       if (didAutofill && lc(emailInput.value) !== lastMatchedEmail){
         clearFill(); setState("neutral"); showMsg("");
@@ -154,18 +181,11 @@
     emailInput.addEventListener("change", function () { clearTimeout(t); evaluate(true); });
     emailInput.addEventListener("blur",   function () { clearTimeout(t); evaluate(true); });
 
-    // Jetboost rewrites the list asynchronously — re-check when it does
-    var wrap = document.querySelector(CFG.listWrapper);
-    if (wrap){
-      new MutationObserver(function () {
-        clearTimeout(t); t = setTimeout(function () { evaluate(false); }, CFG.debounceMs);
-      }).observe(wrap, { childList: true, subtree: true, attributes: true, attributeFilter: ["class","style"] });
-    }
-
     if (CFG.blockSubmitOnInvalid && form.tagName === "FORM"){
       form.addEventListener("submit", function (e){
-        var raw = emailInput.value;
-        if (raw && !pickMatch(lc(raw)) && classify(raw).state === "invalid"){
+        var typed = lc(emailInput.value);
+        // A recognized lead (the email we just matched) is always allowed.
+        if (typed && typed !== lastMatchedEmail && classify(typed).state === "invalid"){
           e.preventDefault(); e.stopPropagation();
           evaluate(true); emailInput.focus();
         }
@@ -176,41 +196,7 @@
   }
 
   /* ------------------------------------------------------------------
-     5) Lead detection (read Jetboost's visible cards)
-  ------------------------------------------------------------------ */
-  function visibleCards(){
-    var wrap = document.querySelector(CFG.listWrapper);
-    if (!wrap) return [];
-    var out = [];
-    wrap.querySelectorAll(CFG.leadCard).forEach(function (c){
-      if (!c.querySelector("[data-lead-email]")) return;            // must be a real lead card
-      if (c.getClientRects().length === 0) return;                  // hidden (display:none / removed)
-      if (c.classList.contains("jetboost-list-item-hide")) return;  // Jetboost "hidden" markers
-      if (c.classList.contains("jetboost-hidden")) return;
-      out.push(c);
-    });
-    return out;
-  }
-
-  function emailOf(card){
-    var n = card.querySelector("[data-lead-email]");
-    return n ? lc(n.getAttribute("data-lead-email") || n.textContent) : "";
-  }
-
-  function pickMatch(typedLc){
-    // SECURITY: only ever match a COMPLETE, EXACT email address. A partial
-    // string (e.g. a first name or first letters) must never reveal a lead,
-    // even if Jetboost has narrowed the list down to a single visible card.
-    if (!EMAIL_RE.test(typedLc)) return null;          // require a full address incl. ".com"
-    var cards = visibleCards();
-    for (var i = 0; i < cards.length; i++){
-      if (emailOf(cards[i]) === typedLc) return cards[i]; // exact, whole-email match only
-    }
-    return null;
-  }
-
-  /* ------------------------------------------------------------------
-     6) Autofill engine
+     5) Autofill engine
   ------------------------------------------------------------------ */
   var didAutofill = false;
   var lastMatchedEmail = "";   // the exact email currently autofilled (for instant-clear on edit)
@@ -241,21 +227,20 @@
     return !!hit;
   }
 
-  function fillFrom(card){
+  function fillFrom(contact, email){
     CFG.fields.forEach(function (f){
-      var node = card.querySelector("[" + f.attr + "]");
-      var val  = node ? norm(node.getAttribute(f.attr) || node.textContent) : "";
+      var val = norm(contact[f.key]);
       if (f.kind === "radio") setRadio(f.sel, val);
       else setText(f.sel, val);
     });
     didAutofill = true;
-    lastMatchedEmail = emailOf(card);   // remember the exact email we filled from
+    lastMatchedEmail = lc(email);   // remember the exact email we filled from
   }
 
   function clearFill(){
     if (!didAutofill) return;   // never wipe values a brand-new lead typed themselves
     CFG.fields.forEach(function (f){
-      if (f.kind === "radio") setRadio(f.sel, " ");  // matches nothing -> unchecks the group
+      if (f.kind === "radio") setRadio(f.sel, " ");  // matches nothing -> unchecks the group
       else setText(f.sel, "");
     });
     didAutofill = false;
@@ -263,7 +248,7 @@
   }
 
   /* ------------------------------------------------------------------
-     7) UI state
+     6) UI state
   ------------------------------------------------------------------ */
   function setState(s){ // "match" | "valid" | "invalid" | "neutral"
     emailInput.classList.remove("is-lead-match","is-email-valid","is-email-invalid");
@@ -279,28 +264,68 @@
   }
 
   /* ------------------------------------------------------------------
+     7) Server-side lookup (exact, complete email only)
+  ------------------------------------------------------------------ */
+  var lastQueried = "";   // dedupe identical lookups
+  var reqSeq = 0;         // ignore responses superseded by a newer keystroke
+
+  function lookup(email, commit){
+    if (email === lastQueried) return;
+    lastQueried = email;
+    var seq = ++reqSeq;
+
+    fetch(CFG.lookupUrl + "?email=" + encodeURIComponent(email), {
+      method: "GET",
+      headers: { "Accept": "application/json" },
+      credentials: "omit"
+    })
+      .then(function (r){ return r.ok ? r.json() : { match: false }; })
+      .then(function (data){
+        if (seq !== reqSeq) return;               // a newer keystroke superseded this
+        if (lc(emailInput.value) !== email) return;
+        if (data && data.match && data.contact){  // returning lead -> fill + green check
+          fillFrom(data.contact, email); setState("match"); showMsg("");
+        } else {
+          gateWorkEmail(email, commit);           // new / unknown lead
+        }
+      })
+      .catch(function (){
+        if (seq !== reqSeq) return;
+        gateWorkEmail(email, commit);             // network error -> fall back to local validation
+      });
+  }
+
+  // New/unknown lead: enforce "work email only", fill nothing.
+  function gateWorkEmail(email, commit){
+    clearFill();
+    var v = classify(email);
+    if (v.state === "valid"){ setState("valid"); showMsg(""); }
+    else if (v.state === "invalid"){
+      if (v.reason === "syntax" && !commit){ setState("neutral"); showMsg(""); }
+      else { setState("invalid"); showMsg(MSG[v.reason] || MSG.syntax); }
+    } else { setState("neutral"); showMsg(""); }
+  }
+
+  /* ------------------------------------------------------------------
      8) Main decision (commit = fired on blur/change/submit)
   ------------------------------------------------------------------ */
   function evaluate(commit){
     if (!emailInput) return;
-    var raw = emailInput.value, typed = lc(raw);
+    var typed = lc(emailInput.value);
 
     if (!typed){                       // field cleared
-      clearFill(); setState("neutral"); showMsg(""); return;
+      lastQueried = ""; clearFill(); setState("neutral"); showMsg(""); return;
     }
 
-    var match = pickMatch(typed);
-    if (match){                        // returning lead -> fill + green check (skip work-email gate)
-      fillFrom(match); setState("match"); showMsg(""); return;
+    // Only ever query a COMPLETE, EXACT email address. A partial string
+    // (a name, first letters) must never trigger a lookup.
+    if (!EMAIL_RE.test(typed)){
+      clearFill();
+      if (commit){ gateWorkEmail(typed, commit); }   // show "valid email?" only on blur/submit
+      else { setState("neutral"); showMsg(""); }      // don't nag mid-typing
+      return;
     }
 
-    clearFill();                       // new / unknown lead -> validate work email
-    var v = classify(raw);
-    if (v.state === "valid"){ setState("valid"); showMsg(""); }
-    else if (v.state === "invalid"){
-      if (v.reason === "syntax" && !commit){ setState("neutral"); showMsg(""); }  // don't nag mid-typing
-      else { setState("invalid"); showMsg(MSG[v.reason] || MSG.syntax); }
-    } else { setState("neutral"); showMsg(""); }
+    lookup(typed, commit);
   }
 })();
-

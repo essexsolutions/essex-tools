@@ -5,7 +5,28 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
 ## Files
 
 - `multi-step.js` — beacon-stripped copy of videsigns "Formly" multi-step form helper.
-- `essex-email-autofill.js` / `essex-email-autofill.css` — email autofill helper.
+- `essex-email-autofill.js` / `essex-email-autofill.css` — returning-lead autofill helper.
+
+## essex-email-autofill.js — v2 (server-side lookup)
+
+**Breaking change vs. v1.** v1 read a Jetboost on-page Collection List (every
+contact's data was in the DOM, capped at 100 items, and the Jetboost search
+input disabled the form's Submit button). v2 removes Jetboost entirely and
+instead calls our own edge API:
+
+    GET /api/contact-lookup?email=…   →   { match, contact }
+
+served by the **`essexsolutions/api`** Webflow Cloud app (mounted at `/api`,
+same origin as the form). Only the single matching contact is ever returned;
+no contact data is shipped to the page.
+
+Required Webflow page changes when deploying v2 to `/contact`:
+- Delete the Jetboost results Collection List from the page.
+- Remove the `jetboost-list-search-input-6xn5` class from the `#Email` field.
+
+Everything else (green check, work-email validation, radio selection,
+instant-clear when the email is edited away from a match) is unchanged.
+The companion `essex-email-autofill.css` is unchanged.
 
 ## multi-step.js — what was changed vs. the original
 
