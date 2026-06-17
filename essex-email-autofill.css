@@ -1,0 +1,28 @@
+
+  /* The email field wrapper must be a positioning context (script enforces too) */
+  .multi-form17_input-field { position: relative; }
+
+  /* Green checkmark — shown only when a returning lead is matched */
+  .lead-status-icon{
+    position:absolute; top:50%; right:14px;
+    transform:translateY(-50%) scale(.5);
+    width:22px; height:22px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:50%; background:#16a34a; color:#fff;
+    opacity:0; pointer-events:none; z-index:3;
+    transition:opacity .18s ease, transform .18s ease;
+  }
+  .lead-status-icon.is-visible{ opacity:1; transform:translateY(-50%) scale(1); }
+  .lead-status-icon svg{ width:13px; height:13px; display:block; }
+
+  /* Email field states */
+  .form_input.is-email-invalid{ border-color:#dc2626 !important; background-color:#fef2f2; }
+  .form_input.is-email-valid  { border-color:#16a34a !important; }
+  .form_input.is-lead-match   { padding-right:44px; }   /* room for the checkmark */
+
+  /* Validation message under the field */
+  .lead-email-msg{
+    display:none; margin-top:6px;
+    font-size:.85rem; line-height:1.35; color:#dc2626;
+  }
+  .lead-email-msg.is-visible{ display:block; }
