@@ -26,7 +26,16 @@ Required Webflow page changes when deploying v2 to `/contact`:
 
 Everything else (green check, work-email validation, radio selection,
 instant-clear when the email is edited away from a match) is unchanged.
-The companion `essex-email-autofill.css` is unchanged.
+
+### v2.1 — gate the multi-step "Next" button
+
+The script also **blocks the multi-step form from advancing past the email
+step unless the email is a valid work email** (or a recognized returning lead,
+which is always allowed). It intercepts the `multi-step.js` Next click *and*
+the Enter key in the capture phase, and greys out the Next button
+(`.email-gate-blocked`) while the email is empty/invalid. Toggle via
+`CFG.gateNextOnInvalidEmail`. This adds one rule to
+`essex-email-autofill.css` — load the matching `@v…` tag for both files.
 
 ## multi-step.js — what was changed vs. the original
 

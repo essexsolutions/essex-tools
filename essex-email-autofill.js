@@ -52,6 +52,9 @@
     radioActiveClass: "is-active-inputactive",   // label class your design adds when a radio is selected
     debounceMs: 400,                             // idle wait after typing STOPS before the lookup
     blockSubmitOnInvalid: false,                 // true = also stop form submit on a non-work email
+    gateNextOnInvalidEmail: true,                // block the multi-step "Next" until the email is a valid work email
+    nextBtnSelector: '[data-form="next-btn"]',   // multi-step.js "Next" button(s)
+    stepSelector:    '[data-form="step"]',       // multi-step.js step wrapper
 
     lists: {
       free:               "https://cdn.jsdelivr.net/npm/free-email-domains/domains.json",
@@ -192,6 +195,19 @@
       }, true);
     }
 
+    if (CFG.gateNextOnInvalidEmail){
+      // Capture phase so we intercept BEFORE multi-step.js's own handlers and
+      // stop the step from advancing.
+      document.addEventListener("click", function (e){
+        var btn = e.target && e.target.closest && e.target.closest(CFG.nextBtnSelector);
+        if (btn) guardNext(e);
+      }, true);
+      // The form uses data-enter="true", so Enter also advances — gate it too.
+      document.addEventListener("keydown", function (e){
+        if (e.key === "Enter" && e.target === emailInput) guardNext(e);
+      }, true);
+    }
+
     evaluate(false); // handle prefilled / back-button states
   }
 
@@ -256,11 +272,52 @@
     if (s === "match")   { emailInput.classList.add("is-lead-match","is-email-valid"); if (icon) icon.classList.add("is-visible"); }
     else if (s === "valid")   emailInput.classList.add("is-email-valid");
     else if (s === "invalid") emailInput.classList.add("is-email-invalid");
+    updateNextGate();  // keep the multi-step "Next" gate in sync with email validity
   }
   function showMsg(text){
     if (!msgEl) return;
     msgEl.textContent = text || "";
     msgEl.classList.toggle("is-visible", !!text);
+  }
+
+  /* ------------------------------------------------------------------
+     6b) Multi-step "Next" gate — only advance on a valid work email
+  ------------------------------------------------------------------ */
+  function isVisible(el){
+    return !!(el && (el.offsetParent !== null || el.getClientRects().length));
+  }
+
+  // The email field may advance the step only if it holds a valid work email —
+  // or a recognized returning lead (always allowed). Empty/invalid => blocked.
+  // Synchronous, so it's safe to call from a click/keydown interceptor.
+  function emailAllowsNext(){
+    if (!emailInput) return true;
+    if (!isVisible(emailInput)) return true;          // not on the email step -> don't interfere
+    var typed = lc(emailInput.value);
+    if (typed && typed === lastMatchedEmail) return true;  // matched lead, even if a free domain
+    return classify(typed).state === "valid";
+  }
+
+  function emailStepNextBtn(){
+    var step = emailInput.closest(CFG.stepSelector);
+    return step ? step.querySelector(CFG.nextBtnSelector) : null;
+  }
+
+  // Grey out (and CSS-disable) the Next button on the email step while invalid.
+  function updateNextGate(){
+    if (!CFG.gateNextOnInvalidEmail) return;
+    var btn = emailStepNextBtn();
+    if (btn) btn.classList.toggle("email-gate-blocked", !emailAllowsNext());
+  }
+
+  // Hard block: stop a Next click / Enter from reaching multi-step.js.
+  function guardNext(e){
+    if (emailAllowsNext()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    evaluate(true);                 // force the red "use your work email" message
+    if (emailInput) emailInput.focus();
   }
 
   /* ------------------------------------------------------------------

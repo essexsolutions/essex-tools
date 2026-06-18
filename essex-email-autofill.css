@@ -26,3 +26,11 @@
     font-size:.85rem; line-height:1.35; color:#dc2626;
   }
   .lead-email-msg.is-visible{ display:block; }
+
+  /* Multi-step "Next" gate — greyed + unclickable until a valid work email.
+     !important beats multi-step.js's inline pointer-events/opacity. */
+  [data-form="next-btn"].email-gate-blocked{
+    opacity:.45 !important;
+    pointer-events:none !important;
+    cursor:not-allowed !important;
+  }
