@@ -35,6 +35,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const seconds = Number(sidenav.dataset.ssSeconds) || TIMER_SECONDS;
   const DURATION = seconds * 1000;
 
+  // Progress bars are vertical by default (fill grows top → bottom). Set
+  // data-ss-bar="horizontal" on .ss_slide_sidenav if your bars run sideways.
+  const VERTICAL = sidenav.dataset.ssBar !== "horizontal";
+
   // Resolve a data-slide-toggle id to its Webflow tab link.
   const resolveTabLink = (id) => {
     const el = document.getElementById(id);
@@ -53,9 +57,6 @@ document.addEventListener("DOMContentLoaded", () => {
     .map((block) => {
       const trigger = block.querySelector("[data-slide-toggle]") || block;
       const fill = block.querySelector(".ss_slidebar--fill");
-      const track = fill ? fill.parentElement : null;
-      // Orientation of the progress bar (vertical connector vs. horizontal).
-      const vertical = track ? track.offsetHeight >= track.offsetWidth : true;
       return {
         block,
         trigger,
@@ -63,7 +64,7 @@ document.addEventListener("DOMContentLoaded", () => {
         iconDefault: block.querySelector(".ss_icon--default"),
         iconActive: block.querySelector(".ss_icon--active"),
         fill,
-        vertical,
+        vertical: VERTICAL,
         anim: null,
       };
     });
