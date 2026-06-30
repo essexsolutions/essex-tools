@@ -9,6 +9,9 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
 - `slide-toggle.js` — `[data-slide-toggle]` triggers that switch Webflow native tabs by ID.
 - `essex-global.js` — site-wide bundle: navbar/subnav behavior, text limiting,
   prefilters, category filters, **and** the slide-toggle logic in one file.
+- `essex-gsap.js` — attribute-driven GSAP animations to sprinkle anywhere.
+  First animation: `[data-gsap-counter="<number>"]` counts up when it scrolls
+  into view (0.5s default). Needs GSAP core on the page; no ScrollTrigger.
 - `ss-slideshow.js` — `.ss_slide_sidenav` slideshow controller: timed auto-advance,
   click-to-switch, default/active icon swap, and an **accumulating**
   `.ss_slidebar--fill` progress bar (active block fills 0→100% over the interval,
@@ -40,6 +43,45 @@ One file for the Webflow **global** custom code (Before `</body>`). Sections:
 **Load this OR `slide-toggle.js`, not both** — section 8 is the same handler,
 so loading both would fire the tab click twice. For the global settings, use
 `essex-global.js` alone.
+
+## essex-gsap.js — attribute-driven GSAP animations
+
+A small framework for in-view animations. Detects entry with
+IntersectionObserver (no ScrollTrigger plugin needed) and degrades cleanly:
+if GSAP isn't on the page, or the visitor has *prefers-reduced-motion*, the
+element is snapped straight to its final state so the number still reads right.
+
+Load **GSAP core first**, then this file, both pinned to a version:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/essexsolutions/essex-tools@v1.1.0/essex-gsap.js"></script>
+```
+
+(GSAP 3.13+ is fully free, all plugins included.)
+
+### Count up on view — `[data-gsap-counter]`
+
+Type the final string in Webflow (e.g. `$1,200+`), then add
+`data-gsap-counter="1200"`. The target is the attribute; the **prefix, suffix,
+decimal places, and thousands separator are inferred from the text you typed**,
+so `$1,200+`, `2.5M`, and `98%` all animate correctly with zero extra config.
+Each piece can be overridden:
+
+| Attribute | Default | Notes |
+| --- | --- | --- |
+| `data-gsap-counter` | — | Target number (required), e.g. `1200` |
+| `data-gsap-counter-duration` | `0.5` | Seconds |
+| `data-gsap-counter-start` | `0` | Value to count from |
+| `data-gsap-counter-ease` | `power1.out` | Any GSAP ease |
+| `data-gsap-counter-decimals` | inferred | Decimal places |
+| `data-gsap-counter-separator` | inferred | Thousands separator (`""` to disable) |
+| `data-gsap-counter-prefix` | inferred | Text before the number |
+| `data-gsap-counter-suffix` | inferred | Text after the number |
+| `data-gsap-counter-once` | `true` | `"false"` replays every time it enters view |
+
+Adding more animation types: each is a self-contained block with its own
+selector and an `initX()` call wired into `init()` at the bottom of the file.
 
 ## slide-toggle.js — switch Webflow tabs from any element
 
