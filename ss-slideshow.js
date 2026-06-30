@@ -20,6 +20,10 @@
  *       · upcoming      → bar 0%, default icon, muted label
  *     When the LAST block finishes it loops: bars reset to 0 and icons +
  *     labels revert to default as the first block starts filling again.
+ *   - GSAP pane animation (if GSAP is on the page): the incoming pane's
+ *     .ss_contentbox eases up from 25% Y / 0 opacity and .image_wrapper fades
+ *     in; both fade out when the bar passes FADE_OUT_AT (80%) so the next slide
+ *     can take over. No-ops cleanly if GSAP isn't loaded.
  *   - Click / tap a block to jump to it (earlier bars snap full) and restart.
  *   - Pauses while the cursor is over the side nav; resumes on leave.
  *   - Runs on desktop only: at/below MOBILE_MAX (default 991px) it stays inert
@@ -49,6 +53,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const ICON_AT = 0.85;
   // Label colour while a block is active (your Webflow text variable).
   const ACTIVE_LABEL_COLOR = "var(--text)";
+
+  // GSAP pane content animation. The incoming pane's .ss_contentbox eases up
+  // from 25% Y / 0 opacity and .image_wrapper fades 0 → 1; both then fade out
+  // once the bar passes FADE_OUT_AT so the next slide can take over.
+  const IN_DURATION = 0.5;   // seconds, content ease-in
+  const FADE_OUT_AT = 0.80;  // fraction of the bar at which content fades out
   // Auto-advance is disabled at/below this width (px) so its repeated tab-clicks
   // don't steal focus from the mobile navbar. Override with data-ss-mobile-max
   // on .ss_slide_sidenav (e.g. "767" to keep it running on tablet).
@@ -72,6 +82,10 @@ document.addEventListener("DOMContentLoaded", () => {
     .map((block) => {
       const trigger = block.querySelector("[data-slide-toggle]") || block;
       const fill = block.querySelector(".ss_slidebar--fill");
+      // Resolve the matching Webflow tab pane so we can animate its content.
+      const link = resolveTabLink(trigger.getAttribute("data-slide-toggle"));
+      const paneId = link && link.getAttribute("aria-controls");
+      const pane = paneId ? document.getElementById(paneId) : null;
       return {
         block,
         trigger,
@@ -79,6 +93,8 @@ document.addEventListener("DOMContentLoaded", () => {
         iconDefault: block.querySelector(".ss_icon--default"),
         iconActive: block.querySelector(".ss_icon--active"),
         label: trigger.querySelector(":scope > div:not(.ss_slide-icons)"),
+        copy: pane ? pane.querySelector(".ss_contentbox") : null,
+        image: pane ? pane.querySelector(".image_wrapper") : null,
         fill,
         vertical: VERTICAL,
         anim: null,
@@ -98,6 +114,39 @@ document.addEventListener("DOMContentLoaded", () => {
     if (nav.iconDefault) nav.iconDefault.style.opacity = on ? "0" : "1";
     if (nav.iconActive) nav.iconActive.style.display = on ? "block" : "none";
     if (nav.label) nav.label.style.color = on ? ACTIVE_LABEL_COLOR : "";
+  };
+
+  // GSAP pane content animation (no-ops gracefully if GSAP isn't present).
+  const gsapTargets = (nav) => [nav.copy, nav.image].filter(Boolean);
+
+  const animateIn = (nav) => {
+    const g = window.gsap;
+    if (!g) return;
+    if (nav.copy) {
+      g.fromTo(nav.copy, { yPercent: 25, opacity: 0 },
+        { yPercent: 0, opacity: 1, duration: IN_DURATION, ease: "power2.out", overwrite: "auto" });
+    }
+    if (nav.image) {
+      g.fromTo(nav.image, { opacity: 0 },
+        { opacity: 1, duration: IN_DURATION, ease: "power2.out", overwrite: "auto" });
+    }
+  };
+
+  const animateOut = (nav) => {
+    const g = window.gsap;
+    const targets = gsapTargets(nav);
+    if (!g || !targets.length) return;
+    // Fade out over the remaining time so it lands right as the tab switches.
+    const outDur = (DURATION * (1 - FADE_OUT_AT)) / 1000;
+    g.to(targets, { opacity: 0, duration: outDur, ease: "power1.in", overwrite: "auto" });
+  };
+
+  const resetContent = (nav) => {
+    const g = window.gsap;
+    const targets = gsapTargets(nav);
+    if (!g || !targets.length) return;
+    g.killTweensOf(targets);
+    g.set(targets, { clearProps: "opacity,transform" });
   };
 
   // Snap a bar to a fixed state (instant, no animation).
@@ -123,20 +172,24 @@ document.addEventListener("DOMContentLoaded", () => {
   let current = -1;
   let fallback = null;
 
-  // Flip a block's icon + label to active when its bar crosses ICON_AT.
-  // Polls the live animation so it honours hover-pause (currentTime freezes).
-  const armIconFlip = (nav, anim) => {
-    const threshold = DURATION * ICON_AT;
-    if (!anim) { // no bar to track → flip on a plain timer (guarded if stale)
-      setTimeout(() => {
-        if (blocks[current] === nav) setActiveVisual(nav, true);
-      }, threshold);
+  // Fire per-block phases as the bar fills: fade content out at FADE_OUT_AT,
+  // flip icon + label at ICON_AT. Polls the live animation so both honour
+  // hover-pause (currentTime freezes while paused).
+  const armPhases = (nav, anim) => {
+    const phases = [
+      { at: FADE_OUT_AT, done: false, fn: () => animateOut(nav) },
+      { at: ICON_AT, done: false, fn: () => setActiveVisual(nav, true) },
+    ];
+    if (!anim) { // no bar to track → fire on plain timers (guarded if stale)
+      phases.forEach((p) =>
+        setTimeout(() => { if (blocks[current] === nav) p.fn(); }, DURATION * p.at));
       return;
     }
     const tick = () => {
       if (nav.anim !== anim) return; // superseded by advance / click
-      const t = typeof anim.currentTime === "number" ? anim.currentTime : 0;
-      if (t >= threshold) { setActiveVisual(nav, true); return; }
+      const frac = (typeof anim.currentTime === "number" ? anim.currentTime : 0) / DURATION;
+      phases.forEach((p) => { if (!p.done && frac >= p.at) { p.done = true; p.fn(); } });
+      if (phases.every((p) => p.done)) return;
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -162,17 +215,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Switch the Webflow tab pane.
-    const link = resolveTabLink(blocks[index].targetId);
+    const active = blocks[index];
+    const link = resolveTabLink(active.targetId);
     if (link) link.click();
 
+    // Animate the now-visible pane's content in.
+    animateIn(active);
+
     // Run the active bar; its finish advances the slideshow.
-    const active = blocks[index];
     const anim = runBar(active);
     if (anim) anim.onfinish = advance;
     else fallback = setTimeout(advance, DURATION);
 
-    // Flip the active block's icon + label once the bar passes ICON_AT (85%).
-    armIconFlip(active, anim);
+    // Fade content out at FADE_OUT_AT, flip icon + label at ICON_AT.
+    armPhases(active, anim);
   };
 
   function advance() {
@@ -205,6 +261,7 @@ document.addEventListener("DOMContentLoaded", () => {
     current = -1;
     blocks.forEach((nav) => {
       cancel(nav);
+      resetContent(nav); // kill GSAP tweens + clear inline opacity/transform
       if (nav.onClick) {
         nav.trigger.removeEventListener("click", nav.onClick);
         nav.onClick = null;

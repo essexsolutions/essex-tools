@@ -20,7 +20,9 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
   activate at `ICON_AT` (85%) of the fill; active label uses `ACTIVE_LABEL_COLOR`
   (`var(--text)`). Runs on desktop only — inert at/below `MOBILE_MAX` (default
   991px, override `data-ss-mobile-max`) so it can't steal focus from the mobile
-  navbar; re-checks on resize/orientation.
+  navbar; re-checks on resize/orientation. If GSAP is on the page, animates each
+  pane's `.ss_contentbox` (up from 25% Y / 0 opacity) and `.image_wrapper` (fade
+  in) on enter, then fades them out at `FADE_OUT_AT` (80%) before the switch.
 
 ## essex-global.js — the site-wide bundle
 
