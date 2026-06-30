@@ -13,7 +13,10 @@
  *   - Auto-advances every TIMER_SECONDS (see CONFIG). Cycles through however
  *     many .ss_side-navblock items exist — add/remove tabs freely.
  *   - Progress bars AND active icons accumulate:
- *       · active block  → fill animates 0 → 100% over the interval (the clock)
+ *       · active block  → bar fills 0 → 100% over the interval (the clock);
+ *                          its icon stays on DEFAULT while filling
+ *       · an icon flips to its ACTIVE state only once its own bar hits 100%
+ *         (i.e. the moment the slideshow advances past it)
  *       · passed blocks → bar pinned at 100%, active icon stays lit
  *       · upcoming      → bar 0%, default icon
  *     When the LAST block finishes it loops: every bar resets to 0 and every
@@ -109,7 +112,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     blocks.forEach((nav, i) => {
       const on = i === index;
-      const lit = i <= index; // active icon stays lit for passed + current blocks
+      // An icon switches to active only once its own bar has filled to 100%
+      // (i.e. it's now a *passed* block). The currently-filling block stays on
+      // its default icon until its bar completes and we advance.
+      const lit = i < index;
       nav.block.classList.toggle("is-active", on);
       if (nav.iconDefault) nav.iconDefault.style.opacity = lit ? "0" : "1";
       if (nav.iconActive) nav.iconActive.style.display = lit ? "block" : "none";
