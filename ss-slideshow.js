@@ -12,12 +12,12 @@
  * Behavior:
  *   - Auto-advances every TIMER_SECONDS (see CONFIG). Cycles through however
  *     many .ss_side-navblock items exist — add/remove tabs freely.
- *   - Progress bars accumulate:
+ *   - Progress bars AND active icons accumulate:
  *       · active block  → fill animates 0 → 100% over the interval (the clock)
- *       · passed blocks → stay pinned at 100%
- *       · upcoming      → 0%
- *     When the LAST block finishes it loops: every bar resets to 0 and the
- *     first block starts filling again.
+ *       · passed blocks → bar pinned at 100%, active icon stays lit
+ *       · upcoming      → bar 0%, default icon
+ *     When the LAST block finishes it loops: every bar resets to 0 and every
+ *     icon reverts to default as the first block starts filling again.
  *   - Click / tap a block to jump to it (earlier bars snap full) and restart.
  *   - Pauses while the cursor is over the side nav; resumes on leave.
  */
@@ -109,12 +109,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     blocks.forEach((nav, i) => {
       const on = i === index;
+      const lit = i <= index; // active icon stays lit for passed + current blocks
       nav.block.classList.toggle("is-active", on);
-      if (nav.iconDefault) nav.iconDefault.style.opacity = on ? "0" : "1";
-      if (nav.iconActive) nav.iconActive.style.display = on ? "block" : "none";
+      if (nav.iconDefault) nav.iconDefault.style.opacity = lit ? "0" : "1";
+      if (nav.iconActive) nav.iconActive.style.display = lit ? "block" : "none";
       if (i < index) setBar(nav, "full");   // already passed → stay full
       else if (i > index) setBar(nav, "empty"); // upcoming → empty
-      // i === index: animated below
+      // i === index: bar animated below
     });
 
     // Switch the Webflow tab pane.
