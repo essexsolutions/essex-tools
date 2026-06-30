@@ -55,7 +55,7 @@ Load **GSAP core first**, then this file, both pinned to a version:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/essexsolutions/essex-tools@v1.1.0/essex-gsap.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/essexsolutions/essex-tools@v2.16.0/essex-gsap.js"></script>
 ```
 
 (GSAP 3.13+ is fully free, all plugins included.)
