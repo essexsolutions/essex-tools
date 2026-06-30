@@ -119,16 +119,25 @@ function initSlideshow() {
   // GSAP pane content animation (no-ops gracefully if GSAP isn't present).
   const gsapTargets = (nav) => [nav.copy, nav.image].filter(Boolean);
 
+  // A global `transition: all` (or any CSS transition on these elements) fights
+  // GSAP — the browser re-animates every per-frame inline change. Disable the
+  // transition while GSAP drives the element; restore it when the tween ends so
+  // idle/hover transitions still work.
+  const freeze = (el) => { if (el) el.style.transition = "none"; };
+  const thaw = (el) => () => { if (el) el.style.transition = ""; };
+
   const animateIn = (nav) => {
     const g = window.gsap;
     if (!g) return;
     if (nav.copy) {
+      freeze(nav.copy);
       g.fromTo(nav.copy, { yPercent: 25, opacity: 0 },
-        { yPercent: 0, opacity: 1, duration: IN_DURATION, ease: "power2.out", overwrite: "auto" });
+        { yPercent: 0, opacity: 1, duration: IN_DURATION, ease: "power2.out", overwrite: "auto", onComplete: thaw(nav.copy) });
     }
     if (nav.image) {
+      freeze(nav.image);
       g.fromTo(nav.image, { opacity: 0 },
-        { opacity: 1, duration: IN_DURATION, ease: "power2.out", overwrite: "auto" });
+        { opacity: 1, duration: IN_DURATION, ease: "power2.out", overwrite: "auto", onComplete: thaw(nav.image) });
     }
   };
 
@@ -136,6 +145,7 @@ function initSlideshow() {
     const g = window.gsap;
     const targets = gsapTargets(nav);
     if (!g || !targets.length) return;
+    targets.forEach(freeze);
     // Fade out over the remaining time so it lands right as the tab switches.
     const outDur = (DURATION * (1 - FADE_OUT_AT)) / 1000;
     g.to(targets, { opacity: 0, duration: outDur, ease: "power1.in", overwrite: "auto" });
@@ -144,9 +154,9 @@ function initSlideshow() {
   const resetContent = (nav) => {
     const g = window.gsap;
     const targets = gsapTargets(nav);
-    if (!g || !targets.length) return;
-    g.killTweensOf(targets);
-    g.set(targets, { clearProps: "opacity,transform" });
+    if (!targets.length) return;
+    if (g) { g.killTweensOf(targets); g.set(targets, { clearProps: "opacity,transform" }); }
+    targets.forEach((el) => { el.style.transition = ""; });
   };
 
   // Snap a bar to a fixed state (instant, no animation).
