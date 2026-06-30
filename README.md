@@ -55,7 +55,7 @@ Load **GSAP core first**, then this file, both pinned to a version:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/essexsolutions/essex-tools@v2.16.0/essex-gsap.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/essexsolutions/essex-tools@v2.17.0/essex-gsap.js"></script>
 ```
 
 (GSAP 3.13+ is fully free, all plugins included.)
@@ -72,6 +72,7 @@ Each piece can be overridden:
 | --- | --- | --- |
 | `data-gsap-counter` | — | Target number (required), e.g. `1200` |
 | `data-gsap-counter-duration` | `0.5` | Seconds |
+| `data-gsap-counter-delay` | `0` | Seconds to wait after entering view (stagger a row of stats) |
 | `data-gsap-counter-start` | `0` | Value to count from |
 | `data-gsap-counter-ease` | `power1.out` | Any GSAP ease |
 | `data-gsap-counter-decimals` | inferred | Decimal places |

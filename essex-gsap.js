@@ -34,6 +34,7 @@
    *
    *   data-gsap-counter           target number (required)   e.g. 1200
    *   data-gsap-counter-duration  seconds                    default 0.5
+   *   data-gsap-counter-delay     seconds to wait on view    default 0
    *   data-gsap-counter-start     value to count from        default 0
    *   data-gsap-counter-ease      GSAP ease                  default power1.out
    *   data-gsap-counter-decimals  decimal places             default: inferred
@@ -99,6 +100,7 @@
         d.gsapCounterDuration != null
           ? parseFloat(d.gsapCounterDuration)
           : DEFAULT_DURATION,
+      delay: d.gsapCounterDelay != null ? parseFloat(d.gsapCounterDelay) : 0,
       ease: d.gsapCounterEase || DEFAULT_EASE,
       decimals: decimals,
       separator: separator,
@@ -133,6 +135,7 @@
     g.to(proxy, {
       val: cfg.target,
       duration: cfg.duration,
+      delay: cfg.delay,
       ease: cfg.ease,
       overwrite: "auto",
       onUpdate: function () {
