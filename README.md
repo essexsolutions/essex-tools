@@ -6,6 +6,25 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
 
 - `multi-step.js` — beacon-stripped copy of videsigns "Formly" multi-step form helper.
 - `essex-email-autofill.js` / `essex-email-autofill.css` — returning-lead autofill helper.
+- `slide-toggle.js` — `[data-slide-toggle]` triggers that switch Webflow native tabs by ID.
+
+## slide-toggle.js — switch Webflow tabs from any element
+
+Lets any element activate a Webflow native tab without being inside the
+Tabs component. Add `data-slide-toggle="<tab-link-id>"` to a button, div,
+image, etc., and clicking it fires the matching tab.
+
+Setup in Webflow:
+1. Give a tab link an ID in Element Settings — e.g. `tab-industrial`.
+2. On any element add custom attribute `data-slide-toggle` = `tab-industrial`.
+3. Clicking that element runs the tab's native switch (animation included),
+   because it triggers Webflow's own `.w-tab-link` click handler.
+
+Notes:
+- One delegated `click` listener, so triggers added later (CMS, IX) still work.
+- The ID may sit on either the tab **link** (`.w-tab-link`) or the tab
+  **pane** (`.w-tab-pane`) — both resolve to the correct link.
+- `e.preventDefault()` stops links/buttons from jumping or submitting.
 
 ## essex-email-autofill.js — v2 (server-side lookup)
 
