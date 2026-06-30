@@ -7,6 +7,25 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
 - `multi-step.js` — beacon-stripped copy of videsigns "Formly" multi-step form helper.
 - `essex-email-autofill.js` / `essex-email-autofill.css` — returning-lead autofill helper.
 - `slide-toggle.js` — `[data-slide-toggle]` triggers that switch Webflow native tabs by ID.
+- `essex-global.js` — site-wide bundle: navbar/subnav behavior, text limiting,
+  prefilters, category filters, **and** the slide-toggle logic in one file.
+
+## essex-global.js — the site-wide bundle
+
+One file for the Webflow **global** custom code (Before `</body>`). Sections:
+
+1. `[data-dd-onclick]` — desktop-only parent dropdown click navigation.
+2. `[data-max-words]` — trim element text to N words with an ellipsis.
+3. Stop navbar tab clicks from closing the open menu.
+4. `[data-tab-toggle]` — custom subnav tab controls (hover on desktop, click on touch).
+5. Blur-on-mouseleave fix so the products dropdown closes cleanly.
+6. `[data-prefilter]` — region subnav prefilter links.
+7. `[data-procat-toggle="submit"]` — build a `/products?…` query from checked filters.
+8. `[data-slide-toggle]` — activate a Webflow native tab by ID (see `slide-toggle.js`).
+
+**Load this OR `slide-toggle.js`, not both** — section 8 is the same handler,
+so loading both would fire the tab click twice. For the global settings, use
+`essex-global.js` alone.
 
 ## slide-toggle.js — switch Webflow tabs from any element
 
