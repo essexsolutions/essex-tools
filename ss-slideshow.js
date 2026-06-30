@@ -22,6 +22,10 @@
  *     labels revert to default as the first block starts filling again.
  *   - Click / tap a block to jump to it (earlier bars snap full) and restart.
  *   - Pauses while the cursor is over the side nav; resumes on leave.
+ *   - Runs on desktop only: at/below MOBILE_MAX (default 991px) it stays inert
+ *     so the repeated tab-clicks don't steal focus from the mobile navbar.
+ *     Re-checks on resize / orientation change. Manual tab taps still work via
+ *     the global [data-slide-toggle] handler.
  */
 document.addEventListener("DOMContentLoaded", () => {
   const sidenav = document.querySelector(".ss_slide_sidenav");
@@ -45,6 +49,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const ICON_AT = 0.85;
   // Label colour while a block is active (your Webflow text variable).
   const ACTIVE_LABEL_COLOR = "var(--text)";
+  // Auto-advance is disabled at/below this width (px) so its repeated tab-clicks
+  // don't steal focus from the mobile navbar. Override with data-ss-mobile-max
+  // on .ss_slide_sidenav (e.g. "767" to keep it running on tablet).
+  const MOBILE_MAX = Number(sidenav.dataset.ssMobileMax) || 991;
 
   // Resolve a data-slide-toggle id to its Webflow tab link.
   const resolveTabLink = (id) => {
@@ -172,26 +180,61 @@ document.addEventListener("DOMContentLoaded", () => {
     go(next, next === 0); // wrapping to the first block resets all bars
   }
 
-  // Click / tap to jump. stopPropagation keeps the global [data-slide-toggle]
-  // handler from also firing (we switch the pane ourselves in go()).
-  blocks.forEach((nav, i) => {
-    nav.trigger.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      go(i, i === 0);
-    });
-  });
+  let running = false;
 
-  // Pause on hover over the side nav, resume on leave.
+  const start = () => {
+    if (running) return;
+    running = true;
+    // Click / tap to jump. stopPropagation keeps the global [data-slide-toggle]
+    // handler from also firing (we switch the pane ourselves in go()).
+    blocks.forEach((nav, i) => {
+      nav.onClick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        go(i, i === 0);
+      };
+      nav.trigger.addEventListener("click", nav.onClick);
+    });
+    go(0, true);
+  };
+
+  const stop = () => {
+    if (!running) return;
+    running = false;
+    clearTimeout(fallback);
+    current = -1;
+    blocks.forEach((nav) => {
+      cancel(nav);
+      if (nav.onClick) {
+        nav.trigger.removeEventListener("click", nav.onClick);
+        nav.onClick = null;
+      }
+      // Clear every inline style we set so bars/icons/label fall back to CSS.
+      if (nav.fill) { nav.fill.style.transform = ""; nav.fill.style.transformOrigin = ""; }
+      if (nav.iconDefault) nav.iconDefault.style.opacity = "";
+      if (nav.iconActive) nav.iconActive.style.display = "";
+      if (nav.label) nav.label.style.color = "";
+      nav.block.classList.remove("is-active");
+    });
+  };
+
+  // Pause on hover over the side nav, resume on leave (desktop only).
   sidenav.addEventListener("mouseenter", () => {
+    if (!running) return;
     const a = blocks[current] && blocks[current].anim;
     if (a) a.pause();
   });
   sidenav.addEventListener("mouseleave", () => {
+    if (!running) return;
     const a = blocks[current] && blocks[current].anim;
     if (a) a.play();
   });
 
-  // Start on the first block.
-  go(0, true);
+  // Run on desktop only; tear down at/below MOBILE_MAX. Re-checks on resize /
+  // orientation change so rotating a phone is handled.
+  const mq = window.matchMedia(`(max-width: ${MOBILE_MAX}px)`);
+  const apply = () => (mq.matches ? stop() : start());
+  apply();
+  if (mq.addEventListener) mq.addEventListener("change", apply);
+  else if (mq.addListener) mq.addListener(apply); // Safari < 14
 });

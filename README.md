@@ -16,7 +16,11 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
   Webflow native Tabs component via each block's `data-slide-toggle` id. Cycles
   through however many `.ss_side-navblock` items exist (auto-detected). Interval
   set in **seconds** via the `TIMER_SECONDS` constant, or per-page with
-  `data-ss-seconds="8"` on `.ss_slide_sidenav`. Pauses on hover.
+  `data-ss-seconds="8"` on `.ss_slide_sidenav`. Pauses on hover. Icon + label
+  activate at `ICON_AT` (85%) of the fill; active label uses `ACTIVE_LABEL_COLOR`
+  (`var(--text)`). Runs on desktop only — inert at/below `MOBILE_MAX` (default
+  991px, override `data-ss-mobile-max`) so it can't steal focus from the mobile
+  navbar; re-checks on resize/orientation.
 
 ## essex-global.js — the site-wide bundle
 
