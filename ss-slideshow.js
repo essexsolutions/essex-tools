@@ -31,7 +31,7 @@
  *     Re-checks on resize / orientation change. Manual tab taps still work via
  *     the global [data-slide-toggle] handler.
  */
-document.addEventListener("DOMContentLoaded", () => {
+function initSlideshow() {
   const sidenav = document.querySelector(".ss_slide_sidenav");
   if (!sidenav) return;
 
@@ -294,4 +294,12 @@ document.addEventListener("DOMContentLoaded", () => {
   apply();
   if (mq.addEventListener) mq.addEventListener("change", apply);
   else if (mq.addListener) mq.addListener(apply); // Safari < 14
-});
+}
+
+// Run now if the DOM is ready, else wait — robust to the CDN script loading
+// after DOMContentLoaded has already fired.
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initSlideshow);
+} else {
+  initSlideshow();
+}
