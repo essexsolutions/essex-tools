@@ -9,8 +9,11 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
 - `slide-toggle.js` — `[data-slide-toggle]` triggers that switch Webflow native tabs by ID.
 - `essex-global.js` — site-wide bundle: navbar/subnav behavior, text limiting,
   prefilters, category filters, **and** the slide-toggle logic in one file.
-- `ss-slideshow.js` — `.ss_slide_sidenav` slideshow. Step 1: default/active icon
-  swap on click. (Auto-advance + slide-bar fill to follow.)
+- `ss-slideshow.js` — `.ss_slide_sidenav` slideshow controller: 5s auto-advance,
+  click-to-switch with timer reset, default/active icon swap, and the
+  `.ss_slidebar--fill` progress animation. Drives a Webflow native Tabs component
+  via each block's `data-slide-toggle` id. Pauses on hover; duration overridable
+  with `data-ss-duration` on `.ss_slide_sidenav`.
 
 ## essex-global.js — the site-wide bundle
 
