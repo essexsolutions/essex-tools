@@ -1,18 +1,24 @@
 /**
  * Essex — slideshow sidenav  (.ss_slide_sidenav)
  *
- * Drives a Webflow native Tabs component from the custom side nav.
+ * Drives a Webflow native Tabs component from the custom side nav and runs an
+ * accumulating progress bar down the list.
+ *
  * Each .ss_side-navblock has:
  *   - a.ss_slide-link[data-slide-toggle="tab-…"]  → the Webflow tab link id
  *   - .ss_icon--default / .ss_icon--active        → swapped on active
- *   - .ss_slide_bar > .ss_slidebar--fill          → progress bar
+ *   - .ss_slide_bar > .ss_slidebar--fill          → progress fill
  *
  * Behavior:
- *   - Auto-advances every TIMER_SECONDS (see config below). Cycles through
- *     however many .ss_side-navblock items exist — add/remove tabs freely.
- *   - Click / tap a block to jump to it and restart the timer.
- *   - The active block's fill animates 0 → 100% over the interval, and its
- *     finish event is what advances the slideshow — one clock, no drift.
+ *   - Auto-advances every TIMER_SECONDS (see CONFIG). Cycles through however
+ *     many .ss_side-navblock items exist — add/remove tabs freely.
+ *   - Progress bars accumulate:
+ *       · active block  → fill animates 0 → 100% over the interval (the clock)
+ *       · passed blocks → stay pinned at 100%
+ *       · upcoming      → 0%
+ *     When the LAST block finishes it loops: every bar resets to 0 and the
+ *     first block starts filling again.
+ *   - Click / tap a block to jump to it (earlier bars snap full) and restart.
  *   - Pauses while the cursor is over the side nav; resumes on leave.
  */
 document.addEventListener("DOMContentLoaded", () => {
@@ -58,28 +64,46 @@ document.addEventListener("DOMContentLoaded", () => {
         iconActive: block.querySelector(".ss_icon--active"),
         fill,
         vertical,
+        anim: null,
       };
     });
 
   if (!blocks.length) return;
 
-  let current = -1;
-  let anim = null;          // the running fill animation = our timer
-  let fallback = null;      // setTimeout used only if a block has no fill
+  const origin = (nav) => (nav.vertical ? "top center" : "left center");
+  const empty  = (nav) => (nav.vertical ? "scaleY(0)" : "scaleX(0)");
+  const full   = (nav) => (nav.vertical ? "scaleY(1)" : "scaleX(1)");
 
-  const scaleEmpty = (nav) => (nav.vertical ? "scaleY(0)" : "scaleX(0)");
-  const scaleFull  = (nav) => (nav.vertical ? "scaleY(1)" : "scaleX(1)");
+  const cancel = (nav) => { if (nav.anim) { nav.anim.cancel(); nav.anim = null; } };
 
-  const resetFill = (nav) => {
+  // Snap a bar to a fixed state (instant, no animation).
+  const setBar = (nav, state) => {
     if (!nav.fill) return;
-    nav.fill.style.transformOrigin = nav.vertical ? "top center" : "left center";
-    nav.fill.style.transform = scaleEmpty(nav);
+    cancel(nav);
+    nav.fill.style.transformOrigin = origin(nav);
+    nav.fill.style.transform = state === "full" ? full(nav) : empty(nav);
   };
 
-  // Move to a block: swap icons, switch the pane, animate the bar, arm the clock.
-  const go = (index) => {
-    if (anim) { anim.cancel(); anim = null; }
+  // Animate the active bar 0 → 100% over DURATION; its finish drives advance.
+  const runBar = (nav) => {
+    if (!nav.fill) return null;
+    cancel(nav);
+    nav.fill.style.transformOrigin = origin(nav);
+    nav.anim = nav.fill.animate(
+      [{ transform: empty(nav) }, { transform: full(nav) }],
+      { duration: DURATION, easing: "linear", fill: "forwards" }
+    );
+    return nav.anim;
+  };
+
+  let current = -1;
+  let fallback = null;
+
+  // Activate block `index`. `reset` wipes every bar first (used when looping
+  // back to the start or jumping to the first block).
+  const go = (index, reset) => {
     clearTimeout(fallback);
+    if (reset) blocks.forEach((nav) => setBar(nav, "empty"));
     current = index;
 
     blocks.forEach((nav, i) => {
@@ -87,29 +111,24 @@ document.addEventListener("DOMContentLoaded", () => {
       nav.block.classList.toggle("is-active", on);
       if (nav.iconDefault) nav.iconDefault.style.opacity = on ? "0" : "1";
       if (nav.iconActive) nav.iconActive.style.display = on ? "block" : "none";
-      if (!on) resetFill(nav);
+      if (i < index) setBar(nav, "full");   // already passed → stay full
+      else if (i > index) setBar(nav, "empty"); // upcoming → empty
+      // i === index: animated below
     });
 
     // Switch the Webflow tab pane.
     const link = resolveTabLink(blocks[index].targetId);
     if (link) link.click();
 
-    // Run the progress bar; its finish advances the slideshow.
-    const nav = blocks[index];
-    if (nav.fill) {
-      nav.fill.style.transformOrigin = nav.vertical ? "top center" : "left center";
-      anim = nav.fill.animate(
-        [{ transform: scaleEmpty(nav) }, { transform: scaleFull(nav) }],
-        { duration: DURATION, easing: "linear", fill: "forwards" }
-      );
-      anim.onfinish = next;
-    } else {
-      fallback = setTimeout(next, DURATION);
-    }
+    // Run the active bar; its finish advances the slideshow.
+    const anim = runBar(blocks[index]);
+    if (anim) anim.onfinish = advance;
+    else fallback = setTimeout(advance, DURATION);
   };
 
-  function next() {
-    go((current + 1) % blocks.length);
+  function advance() {
+    const next = (current + 1) % blocks.length;
+    go(next, next === 0); // wrapping to the first block resets all bars
   }
 
   // Click / tap to jump. stopPropagation keeps the global [data-slide-toggle]
@@ -118,14 +137,20 @@ document.addEventListener("DOMContentLoaded", () => {
     nav.trigger.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      go(i);
+      go(i, i === 0);
     });
   });
 
   // Pause on hover over the side nav, resume on leave.
-  sidenav.addEventListener("mouseenter", () => { if (anim) anim.pause(); });
-  sidenav.addEventListener("mouseleave", () => { if (anim) anim.play(); });
+  sidenav.addEventListener("mouseenter", () => {
+    const a = blocks[current] && blocks[current].anim;
+    if (a) a.pause();
+  });
+  sidenav.addEventListener("mouseleave", () => {
+    const a = blocks[current] && blocks[current].anim;
+    if (a) a.play();
+  });
 
   // Start on the first block.
-  go(0);
+  go(0, true);
 });
