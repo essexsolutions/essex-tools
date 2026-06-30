@@ -12,15 +12,14 @@
  * Behavior:
  *   - Auto-advances every TIMER_SECONDS (see CONFIG). Cycles through however
  *     many .ss_side-navblock items exist — add/remove tabs freely.
- *   - Progress bars AND active icons accumulate:
- *       · active block  → bar fills 0 → 100% over the interval (the clock);
- *                          its icon stays on DEFAULT while filling
- *       · an icon flips to its ACTIVE state only once its own bar hits 100%
- *         (i.e. the moment the slideshow advances past it)
- *       · passed blocks → bar pinned at 100%, active icon stays lit
- *       · upcoming      → bar 0%, default icon
- *     When the LAST block finishes it loops: every bar resets to 0 and every
- *     icon reverts to default as the first block starts filling again.
+ *   - Progress bars, active icons, and labels accumulate:
+ *       · active block  → bar fills 0 → 100% over the interval (the clock)
+ *       · a block's icon swaps to active and its label recolours to
+ *         ACTIVE_LABEL_COLOR once the bar passes ICON_AT (default 85%)
+ *       · passed blocks → bar pinned at 100%, icon + label stay active
+ *       · upcoming      → bar 0%, default icon, muted label
+ *     When the LAST block finishes it loops: bars reset to 0 and icons +
+ *     labels revert to default as the first block starts filling again.
  *   - Click / tap a block to jump to it (earlier bars snap full) and restart.
  *   - Pauses while the cursor is over the side nav; resumes on leave.
  */
@@ -41,6 +40,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // Progress bars are vertical by default (fill grows top → bottom). Set
   // data-ss-bar="horizontal" on .ss_slide_sidenav if your bars run sideways.
   const VERTICAL = sidenav.dataset.ssBar !== "horizontal";
+
+  // Fraction of the bar fill at which a block's icon + label switch to active.
+  const ICON_AT = 0.85;
+  // Label colour while a block is active (your Webflow text variable).
+  const ACTIVE_LABEL_COLOR = "var(--text)";
 
   // Resolve a data-slide-toggle id to its Webflow tab link.
   const resolveTabLink = (id) => {
@@ -66,6 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
         targetId: trigger.getAttribute("data-slide-toggle"),
         iconDefault: block.querySelector(".ss_icon--default"),
         iconActive: block.querySelector(".ss_icon--active"),
+        label: trigger.querySelector(":scope > div:not(.ss_slide-icons)"),
         fill,
         vertical: VERTICAL,
         anim: null,
@@ -79,6 +84,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const full   = (nav) => (nav.vertical ? "scaleY(1)" : "scaleX(1)");
 
   const cancel = (nav) => { if (nav.anim) { nav.anim.cancel(); nav.anim = null; } };
+
+  // Active visual state for a block: swap icon + recolour label.
+  const setActiveVisual = (nav, on) => {
+    if (nav.iconDefault) nav.iconDefault.style.opacity = on ? "0" : "1";
+    if (nav.iconActive) nav.iconActive.style.display = on ? "block" : "none";
+    if (nav.label) nav.label.style.color = on ? ACTIVE_LABEL_COLOR : "";
+  };
 
   // Snap a bar to a fixed state (instant, no animation).
   const setBar = (nav, state) => {
@@ -103,6 +115,25 @@ document.addEventListener("DOMContentLoaded", () => {
   let current = -1;
   let fallback = null;
 
+  // Flip a block's icon + label to active when its bar crosses ICON_AT.
+  // Polls the live animation so it honours hover-pause (currentTime freezes).
+  const armIconFlip = (nav, anim) => {
+    const threshold = DURATION * ICON_AT;
+    if (!anim) { // no bar to track → flip on a plain timer (guarded if stale)
+      setTimeout(() => {
+        if (blocks[current] === nav) setActiveVisual(nav, true);
+      }, threshold);
+      return;
+    }
+    const tick = () => {
+      if (nav.anim !== anim) return; // superseded by advance / click
+      const t = typeof anim.currentTime === "number" ? anim.currentTime : 0;
+      if (t >= threshold) { setActiveVisual(nav, true); return; }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+
   // Activate block `index`. `reset` wipes every bar first (used when looping
   // back to the start or jumping to the first block).
   const go = (index, reset) => {
@@ -112,13 +143,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     blocks.forEach((nav, i) => {
       const on = i === index;
-      // An icon switches to active only once its own bar has filled to 100%
-      // (i.e. it's now a *passed* block). The currently-filling block stays on
-      // its default icon until its bar completes and we advance.
-      const lit = i < index;
       nav.block.classList.toggle("is-active", on);
-      if (nav.iconDefault) nav.iconDefault.style.opacity = lit ? "0" : "1";
-      if (nav.iconActive) nav.iconActive.style.display = lit ? "block" : "none";
+      // Passed blocks show their active icon + coloured label. The current
+      // block starts on its default icon/muted label and flips at ICON_AT;
+      // upcoming blocks stay default.
+      setActiveVisual(nav, i < index);
       if (i < index) setBar(nav, "full");   // already passed → stay full
       else if (i > index) setBar(nav, "empty"); // upcoming → empty
       // i === index: bar animated below
@@ -129,9 +158,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (link) link.click();
 
     // Run the active bar; its finish advances the slideshow.
-    const anim = runBar(blocks[index]);
+    const active = blocks[index];
+    const anim = runBar(active);
     if (anim) anim.onfinish = advance;
     else fallback = setTimeout(advance, DURATION);
+
+    // Flip the active block's icon + label once the bar passes ICON_AT (85%).
+    armIconFlip(active, anim);
   };
 
   function advance() {
