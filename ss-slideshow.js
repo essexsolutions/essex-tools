@@ -8,10 +8,10 @@
  *   - .ss_slide_bar > .ss_slidebar--fill          → progress bar
  *
  * Behavior:
- *   - Auto-advances every DURATION ms (default 5000; override with
- *     data-ss-duration on .ss_slide_sidenav).
+ *   - Auto-advances every TIMER_SECONDS (see config below). Cycles through
+ *     however many .ss_side-navblock items exist — add/remove tabs freely.
  *   - Click / tap a block to jump to it and restart the timer.
- *   - The active block's fill animates 0 → 100% over DURATION, and its
+ *   - The active block's fill animates 0 → 100% over the interval, and its
  *     finish event is what advances the slideshow — one clock, no drift.
  *   - Pauses while the cursor is over the side nav; resumes on leave.
  */
@@ -19,7 +19,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const sidenav = document.querySelector(".ss_slide_sidenav");
   if (!sidenav) return;
 
-  const DURATION = Number(sidenav.dataset.ssDuration) || 5000;
+  /* ===================== CONFIG ===================== *
+   * How long each tab stays before advancing, in SECONDS.
+   * Change it here, or — without a code push — set
+   * data-ss-seconds="8" on the .ss_slide_sidenav element in Webflow.
+   * ================================================== */
+  const TIMER_SECONDS = 5;
+
+  const seconds = Number(sidenav.dataset.ssSeconds) || TIMER_SECONDS;
+  const DURATION = seconds * 1000;
 
   // Resolve a data-slide-toggle id to its Webflow tab link.
   const resolveTabLink = (id) => {

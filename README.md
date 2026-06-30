@@ -12,8 +12,10 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
 - `ss-slideshow.js` — `.ss_slide_sidenav` slideshow controller: 5s auto-advance,
   click-to-switch with timer reset, default/active icon swap, and the
   `.ss_slidebar--fill` progress animation. Drives a Webflow native Tabs component
-  via each block's `data-slide-toggle` id. Pauses on hover; duration overridable
-  with `data-ss-duration` on `.ss_slide_sidenav`.
+  via each block's `data-slide-toggle` id. Cycles through however many
+  `.ss_side-navblock` items exist (auto-detected). Interval set in **seconds**
+  via the `TIMER_SECONDS` constant, or per-page with `data-ss-seconds="8"` on
+  `.ss_slide_sidenav`. Pauses on hover.
 
 ## essex-global.js — the site-wide bundle
 
