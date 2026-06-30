@@ -20,16 +20,17 @@
  *       · upcoming      → bar 0%, default icon, muted label
  *     When the LAST block finishes it loops: bars reset to 0 and icons +
  *     labels revert to default as the first block starts filling again.
- *   - GSAP pane animation (if GSAP is on the page): the incoming pane's
- *     .ss_contentbox eases up from 25% Y / 0 opacity and .image_wrapper fades
- *     in; both fade out when the bar passes FADE_OUT_AT (80%) so the next slide
- *     can take over. No-ops cleanly if GSAP isn't loaded.
+ *   - Optional GSAP pane animation (OFF by default; set data-ss-content-anim
+ *     ="true" and turn the native Webflow tab fade off): incoming .ss_contentbox
+ *     eases up from 25% Y / 0 opacity, .image_wrapper fades in, and both fade
+ *     out at FADE_OUT_AT (80%) before the switch. No-ops if GSAP isn't loaded.
  *   - Click / tap a block to jump to it (earlier bars snap full) and restart.
  *   - Pauses while the cursor is over the side nav; resumes on leave.
- *   - Runs on desktop only: at/below MOBILE_MAX (default 991px) it stays inert
- *     so the repeated tab-clicks don't steal focus from the mobile navbar.
- *     Re-checks on resize / orientation change. Manual tab taps still work via
- *     the global [data-slide-toggle] handler.
+ *   - Starts only once the slideshow scrolls into view (IntersectionObserver),
+ *     and on desktop only: inert at/below MOBILE_MAX (default 991px) so the
+ *     repeated tab-clicks don't steal focus from the mobile navbar. Re-checks on
+ *     resize / orientation change. Manual tab taps still work via the global
+ *     [data-slide-toggle] handler.
  */
 function initSlideshow() {
   const sidenav = document.querySelector(".ss_slide_sidenav");
@@ -59,6 +60,11 @@ function initSlideshow() {
   // once the bar passes FADE_OUT_AT so the next slide can take over.
   const IN_DURATION = 0.5;   // seconds, content ease-in
   const FADE_OUT_AT = 0.80;  // fraction of the bar at which content fades out
+  // GSAP content animation is OFF by default so it can't fight a native Webflow
+  // tab fade. Set data-ss-content-anim="true" on .ss_slide_sidenav (and turn the
+  // native tab fade OFF) to use the slide-up + image fade instead.
+  const CONTENT_ANIM = sidenav.dataset.ssContentAnim === "true";
+
   // Auto-advance is disabled at/below this width (px) so its repeated tab-clicks
   // don't steal focus from the mobile navbar. Override with data-ss-mobile-max
   // on .ss_slide_sidenav (e.g. "767" to keep it running on tablet).
@@ -187,9 +193,9 @@ function initSlideshow() {
   // hover-pause (currentTime freezes while paused).
   const armPhases = (nav, anim) => {
     const phases = [
-      { at: FADE_OUT_AT, done: false, fn: () => animateOut(nav) },
       { at: ICON_AT, done: false, fn: () => setActiveVisual(nav, true) },
     ];
+    if (CONTENT_ANIM) phases.push({ at: FADE_OUT_AT, done: false, fn: () => animateOut(nav) });
     if (!anim) { // no bar to track → fire on plain timers (guarded if stale)
       phases.forEach((p) =>
         setTimeout(() => { if (blocks[current] === nav) p.fn(); }, DURATION * p.at));
@@ -229,8 +235,8 @@ function initSlideshow() {
     const link = resolveTabLink(active.targetId);
     if (link) link.click();
 
-    // Animate the now-visible pane's content in.
-    animateIn(active);
+    // Animate the now-visible pane's content in (opt-in; off by default).
+    if (CONTENT_ANIM) animateIn(active);
 
     // Run the active bar; its finish advances the slideshow.
     const anim = runBar(active);
@@ -297,11 +303,30 @@ function initSlideshow() {
     if (a) a.play();
   });
 
-  // Run on desktop only; tear down at/below MOBILE_MAX. Re-checks on resize /
-  // orientation change so rotating a phone is handled.
+  // Start only once the slideshow scrolls into view, and on desktop only.
+  // Tears down at/below MOBILE_MAX; re-checks on resize / orientation change.
   const mq = window.matchMedia(`(max-width: ${MOBILE_MAX}px)`);
-  const apply = () => (mq.matches ? stop() : start());
-  apply();
+  let inView = false;
+  const apply = () => {
+    if (mq.matches) stop();      // mobile → never auto-run
+    else if (inView) start();    // desktop + seen → run (no-op if already running)
+    // desktop but not yet in view → wait for the observer
+  };
+
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        inView = true;
+        io.disconnect(); // one-shot: start once, then stop observing
+        apply();
+      }
+    }, { threshold: 0.25 });
+    io.observe(sidenav);
+  } else {
+    inView = true; // no IntersectionObserver → start without the in-view gate
+  }
+
+  apply(); // mobile teardown is immediate; desktop waits for in-view
   if (mq.addEventListener) mq.addEventListener("change", apply);
   else if (mq.addListener) mq.addListener(apply); // Safari < 14
 }
