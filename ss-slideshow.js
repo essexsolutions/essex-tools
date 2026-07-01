@@ -21,10 +21,11 @@
  *     When the LAST block finishes it loops: bars reset to 0 and icons +
  *     labels revert to default as the first block starts filling again.
  *   - Pane content animation, split across two systems:
- *       · .ss_contentbox copy — fired via the native Webflow IX3 "slidechange"
- *         custom trigger (built in Designer) every time a new slide becomes
- *         active. The script only emits the event; the interaction itself
- *         owns the timing/easing.
+ *       · .ss_contentbox copy — driven by two native Webflow IX3 custom
+ *         triggers built in Designer. "slidechange" fires when a new slide
+ *         becomes active (play copy IN); "slidehide" fires at FADE_OUT_AT,
+ *         just before the switch (play copy OUT, the reverse). The script
+ *         only emits the events; the interactions own the timing/easing.
  *       · .image_wrapper — OPTIONAL GSAP fade, OFF by default. Set
  *         data-ss-content-anim="true" on .ss_slide_sidenav to ease it in on
  *         enter and fade it out at FADE_OUT_AT (80%) before the switch.
@@ -63,7 +64,7 @@ function initSlideshow() {
   // GSAP pane content animation. The incoming pane's .image_wrapper fades
   // 0 → 1, then fades back out once the bar passes FADE_OUT_AT so the next
   // slide can take over. (.ss_contentbox is animated separately by the native
-  // "slidechange" IX3 trigger — see emitSlideChange below.)
+  // "slidechange"/"slidehide" IX3 triggers — see emitIx below.)
   const IN_DURATION = 0.5;   // seconds, content ease-in
   const FADE_OUT_AT = 0.80;  // fraction of the bar at which content fades out
   // GSAP content animation is OFF by default so it can't fight a native Webflow
@@ -127,15 +128,17 @@ function initSlideshow() {
     if (nav.label) nav.label.style.color = on ? ACTIVE_LABEL_COLOR : "";
   };
 
-  // Native Webflow IX3 interaction, built in Designer against a "slidechange"
-  // custom trigger, animates each pane's .ss_contentbox. The script's only
-  // job is to fire it whenever a new slide becomes active; the interaction
-  // owns its own timing/easing. No-ops if ix3 isn't available (e.g. IX2-only
-  // sites or the Designer canvas).
-  const emitSlideChange = () => {
+  // Fire a native Webflow IX3 custom trigger. Interactions built in Designer
+  // against these events animate each pane's .ss_contentbox; the script only
+  // emits the events and the interactions own their timing/easing:
+  //   · "slidechange" — a new slide becomes active → play the copy IN.
+  //   · "slidehide"   — the active slide is about to leave (fired at
+  //                     FADE_OUT_AT) → play the copy OUT (reverse of IN).
+  // No-ops if ix3 isn't available (e.g. IX2-only sites or the Designer canvas).
+  const emitIx = (event) => {
     try {
       const wfIx = window.Webflow && window.Webflow.require && window.Webflow.require("ix3");
-      if (wfIx) wfIx.emit("slidechange");
+      if (wfIx) wfIx.emit(event);
     } catch (e) {
       // ix3 not present — no-op.
     }
@@ -195,11 +198,14 @@ function initSlideshow() {
   let current = -1;
   let fallback = null;
 
-  // Fire per-block phases as the bar fills: fade content out at FADE_OUT_AT,
-  // flip icon + label at ICON_AT. Polls the live animation so both honour
-  // hover-pause (currentTime freezes while paused).
+  // Fire per-block phases as the bar fills: play the copy OUT (native "slidehide"
+  // IX3 trigger) at FADE_OUT_AT so it reverses just before the next slide's
+  // "slidechange" plays the new copy IN, and flip icon + label at ICON_AT. Polls
+  // the live animation so both honour hover-pause (currentTime freezes while
+  // paused).
   const armPhases = (nav, anim) => {
     const phases = [
+      { at: FADE_OUT_AT, done: false, fn: () => emitIx("slidehide") },
       { at: ICON_AT, done: false, fn: () => setActiveVisual(nav, true) },
     ];
     if (CONTENT_ANIM) phases.push({ at: FADE_OUT_AT, done: false, fn: () => animateOut(nav) });
@@ -243,8 +249,9 @@ function initSlideshow() {
     if (link) link.click();
 
     // Fire the native "slidechange" IX3 trigger every time — it animates the
-    // pane's .ss_contentbox via a Designer interaction.
-    emitSlideChange();
+    // pane's .ss_contentbox IN via a Designer interaction. The matching
+    // "slidehide" (OUT) is fired later at FADE_OUT_AT (see armPhases).
+    emitIx("slidechange");
     // Optionally ease the pane's .image_wrapper in with GSAP (opt-in; off by
     // default so it can't fight a native Webflow tab fade).
     if (CONTENT_ANIM) animateIn(active);

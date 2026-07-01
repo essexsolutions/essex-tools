@@ -25,12 +25,13 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
   991px, override `data-ss-mobile-max`) so it can't steal focus from the mobile
   navbar; re-checks on resize/orientation. **Starts only once it scrolls into
   view** (IntersectionObserver). Pane content animation is split across two
-  systems: `.ss_contentbox` is animated by the native Webflow IX3
-  **"slidechange"** custom trigger (built in Designer — the script just emits
-  `wfIx.emit("slidechange")` every time a new slide becomes active), while the
+  systems: `.ss_contentbox` is animated by two native Webflow IX3 custom
+  triggers (built in Designer) — the script emits **`"slidechange"`** when a new
+  slide becomes active (play copy IN) and **`"slidehide"`** at `FADE_OUT_AT`
+  (80%), just before the switch (play copy OUT, the reverse). The
   `.image_wrapper` GSAP fade is **optional and off by default** (set
   `data-ss-content-anim="true"` on `.ss_slide_sidenav` to fade it in on enter
-  and out at `FADE_OUT_AT` (80%) before the switch).
+  and out at `FADE_OUT_AT` before the switch).
 
 ## essex-global.js — the site-wide bundle
 
