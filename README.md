@@ -156,9 +156,25 @@ Original source: `https://cdn.jsdelivr.net/gh/videsigns/webflow-tools@latest/mul
    git push origin v1.0.0
    ```
 
-2. **Load via jsDelivr**, pinned to the tag, with Subresource Integrity.
-   Put this in *Site/Page Settings → Custom Code → Before </body>* and
-   DELETE the old `h2mwk5.csb.app` tag (and the commented-out `@latest` line):
+2. **Load via jsDelivr**, pinned to the tag. Put this in *Site/Page Settings →
+   Custom Code → Before </body>* and DELETE the old `h2mwk5.csb.app` tag (and
+   the commented-out `@latest` line):
+
+   ```html
+   <script src="https://cdn.jsdelivr.net/gh/essexsolutions/essex-tools@v1.0.0/multi-step.js"></script>
+   ```
+
+### Subresource Integrity (optional)
+
+Pinning to an immutable tag already means the file at that URL can never change,
+so an `integrity` hash is **optional**. It buys one extra thing: if jsDelivr
+itself were compromised and served different bytes at that exact URL, the
+browser would refuse to run the file. Real, but low-probability — and it comes
+at a cost: every time you cut a new version you **must** recompute the hash or
+the browser hard-blocks the script (silent breakage).
+
+If you want it, add `integrity` + `crossorigin` (both are required together —
+SRI on a cross-origin script needs `crossorigin` to verify):
 
    ```html
    <script
@@ -167,13 +183,14 @@ Original source: `https://cdn.jsdelivr.net/gh/videsigns/webflow-tools@latest/mul
      crossorigin="anonymous"></script>
    ```
 
-   The `integrity` hash makes the browser refuse to run the file if even one byte
-   changes — so a compromised CDN cannot inject code. Recompute it whenever you
-   intentionally update the file:
+   Recompute the hash whenever you tag a new version:
 
    ```sh
    echo "sha384-$(openssl dgst -sha384 -binary multi-step.js | openssl base64 -A)"
    ```
+
+Current practice on the Essex site is to load **without** SRI — the tag pin is
+considered enough for these public, secret-free scripts.
 
 ### Notes
 - Pinning to `@v1.0.0` (or a full commit SHA) means it can never silently
