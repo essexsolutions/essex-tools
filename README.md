@@ -24,10 +24,13 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
   (`var(--text)`). Runs on desktop only — inert at/below `MOBILE_MAX` (default
   991px, override `data-ss-mobile-max`) so it can't steal focus from the mobile
   navbar; re-checks on resize/orientation. **Starts only once it scrolls into
-  view** (IntersectionObserver). Optional GSAP pane content animation is **off by
-  default** (set `data-ss-content-anim="true"` and turn the native Webflow tab
-  fade off to use it): `.ss_contentbox` up from 25% Y / 0 opacity, `.image_wrapper`
-  fade in, both fading out at `FADE_OUT_AT` (80%) before the switch.
+  view** (IntersectionObserver). Pane content animation is split across two
+  systems: `.ss_contentbox` is animated by the native Webflow IX3
+  **"slidechange"** custom trigger (built in Designer — the script just emits
+  `wfIx.emit("slidechange")` every time a new slide becomes active), while the
+  `.image_wrapper` GSAP fade is **optional and off by default** (set
+  `data-ss-content-anim="true"` on `.ss_slide_sidenav` to fade it in on enter
+  and out at `FADE_OUT_AT` (80%) before the switch).
 
 ## essex-global.js — the site-wide bundle
 

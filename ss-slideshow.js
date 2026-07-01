@@ -20,10 +20,15 @@
  *       · upcoming      → bar 0%, default icon, muted label
  *     When the LAST block finishes it loops: bars reset to 0 and icons +
  *     labels revert to default as the first block starts filling again.
- *   - Optional GSAP pane animation (OFF by default; set data-ss-content-anim
- *     ="true" and turn the native Webflow tab fade off): incoming .ss_contentbox
- *     eases up from 25% Y / 0 opacity, .image_wrapper fades in, and both fade
- *     out at FADE_OUT_AT (80%) before the switch. No-ops if GSAP isn't loaded.
+ *   - Pane content animation, split across two systems:
+ *       · .ss_contentbox copy — fired via the native Webflow IX3 "slidechange"
+ *         custom trigger (built in Designer) every time a new slide becomes
+ *         active. The script only emits the event; the interaction itself
+ *         owns the timing/easing.
+ *       · .image_wrapper — OPTIONAL GSAP fade, OFF by default. Set
+ *         data-ss-content-anim="true" on .ss_slide_sidenav to ease it in on
+ *         enter and fade it out at FADE_OUT_AT (80%) before the switch.
+ *         No-ops cleanly if GSAP isn't loaded.
  *   - Click / tap a block to jump to it (earlier bars snap full) and restart.
  *   - Pauses while the cursor is over the side nav; resumes on leave.
  *   - Starts only once the slideshow scrolls into view (IntersectionObserver),
@@ -55,9 +60,10 @@ function initSlideshow() {
   // Label colour while a block is active (your Webflow text variable).
   const ACTIVE_LABEL_COLOR = "var(--text)";
 
-  // GSAP pane content animation. The incoming pane's .ss_contentbox eases up
-  // from 25% Y / 0 opacity and .image_wrapper fades 0 → 1; both then fade out
-  // once the bar passes FADE_OUT_AT so the next slide can take over.
+  // GSAP pane content animation. The incoming pane's .image_wrapper fades
+  // 0 → 1, then fades back out once the bar passes FADE_OUT_AT so the next
+  // slide can take over. (.ss_contentbox is animated separately by the native
+  // "slidechange" IX3 trigger — see emitSlideChange below.)
   const IN_DURATION = 0.5;   // seconds, content ease-in
   const FADE_OUT_AT = 0.80;  // fraction of the bar at which content fades out
   // GSAP content animation is OFF by default so it can't fight a native Webflow
@@ -99,7 +105,6 @@ function initSlideshow() {
         iconDefault: block.querySelector(".ss_icon--default"),
         iconActive: block.querySelector(".ss_icon--active"),
         label: trigger.querySelector(":scope > div:not(.ss_slide-icons)"),
-        copy: pane ? pane.querySelector(".ss_contentbox") : null,
         image: pane ? pane.querySelector(".image_wrapper") : null,
         fill,
         vertical: VERTICAL,
@@ -122,8 +127,19 @@ function initSlideshow() {
     if (nav.label) nav.label.style.color = on ? ACTIVE_LABEL_COLOR : "";
   };
 
-  // GSAP pane content animation (no-ops gracefully if GSAP isn't present).
-  const gsapTargets = (nav) => [nav.copy, nav.image].filter(Boolean);
+  // Native Webflow IX3 interaction, built in Designer against a "slidechange"
+  // custom trigger, animates each pane's .ss_contentbox. The script's only
+  // job is to fire it whenever a new slide becomes active; the interaction
+  // owns its own timing/easing. No-ops if ix3 isn't available (e.g. IX2-only
+  // sites or the Designer canvas).
+  const emitSlideChange = () => {
+    try {
+      const wfIx = window.Webflow && window.Webflow.require && window.Webflow.require("ix3");
+      if (wfIx) wfIx.emit("slidechange");
+    } catch (e) {
+      // ix3 not present — no-op.
+    }
+  };
 
   // A global `transition: all` (or any CSS transition on these elements) fights
   // GSAP — the browser re-animates every per-frame inline change. Disable the
@@ -134,35 +150,26 @@ function initSlideshow() {
 
   const animateIn = (nav) => {
     const g = window.gsap;
-    if (!g) return;
-    if (nav.copy) {
-      freeze(nav.copy);
-      g.fromTo(nav.copy, { yPercent: 25, opacity: 0 },
-        { yPercent: 0, opacity: 1, duration: IN_DURATION, ease: "power2.out", overwrite: "auto", onComplete: thaw(nav.copy) });
-    }
-    if (nav.image) {
-      freeze(nav.image);
-      g.fromTo(nav.image, { opacity: 0 },
-        { opacity: 1, duration: IN_DURATION, ease: "power2.out", overwrite: "auto", onComplete: thaw(nav.image) });
-    }
+    if (!g || !nav.image) return;
+    freeze(nav.image);
+    g.fromTo(nav.image, { opacity: 0 },
+      { opacity: 1, duration: IN_DURATION, ease: "power2.out", overwrite: "auto", onComplete: thaw(nav.image) });
   };
 
   const animateOut = (nav) => {
     const g = window.gsap;
-    const targets = gsapTargets(nav);
-    if (!g || !targets.length) return;
-    targets.forEach(freeze);
+    if (!g || !nav.image) return;
+    freeze(nav.image);
     // Fade out over the remaining time so it lands right as the tab switches.
     const outDur = (DURATION * (1 - FADE_OUT_AT)) / 1000;
-    g.to(targets, { opacity: 0, duration: outDur, ease: "power1.in", overwrite: "auto" });
+    g.to(nav.image, { opacity: 0, duration: outDur, ease: "power1.in", overwrite: "auto" });
   };
 
   const resetContent = (nav) => {
     const g = window.gsap;
-    const targets = gsapTargets(nav);
-    if (!targets.length) return;
-    if (g) { g.killTweensOf(targets); g.set(targets, { clearProps: "opacity,transform" }); }
-    targets.forEach((el) => { el.style.transition = ""; });
+    if (!nav.image) return;
+    if (g) { g.killTweensOf(nav.image); g.set(nav.image, { clearProps: "opacity,transform" }); }
+    nav.image.style.transition = "";
   };
 
   // Snap a bar to a fixed state (instant, no animation).
@@ -235,7 +242,11 @@ function initSlideshow() {
     const link = resolveTabLink(active.targetId);
     if (link) link.click();
 
-    // Animate the now-visible pane's content in (opt-in; off by default).
+    // Fire the native "slidechange" IX3 trigger every time — it animates the
+    // pane's .ss_contentbox via a Designer interaction.
+    emitSlideChange();
+    // Optionally ease the pane's .image_wrapper in with GSAP (opt-in; off by
+    // default so it can't fight a native Webflow tab fade).
     if (CONTENT_ANIM) animateIn(active);
 
     // Run the active bar; its finish advances the slideshow.
