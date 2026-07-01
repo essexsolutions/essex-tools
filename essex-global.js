@@ -11,6 +11,7 @@
  *   6. Region subnav prefilter               [data-prefilter]
  *   7. Subnav category filters               [data-procat-toggle="submit"]
  *   8. Slide-toggle → Webflow native tabs    [data-slide-toggle]
+ *   9. Append URL anchor to links            [data-page-anchor]
  */
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -211,6 +212,30 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       console.warn("[slide-toggle] no tab found for id:", trigger.getAttribute("data-slide-toggle"));
     }
+  });
+
+
+  /* ============================================================
+   * 9. APPEND URL ANCHOR TO LINKS  [data-page-anchor]
+   * A link with data-page-anchor="value" gets "#value" appended to
+   * its existing href, so it lands on the target page already anchored
+   * to that section (e.g. href="/about" + data-page-anchor="team"
+   * → "/about#team"). The attribute value may include the leading "#"
+   * or not — both work. Any existing #hash on the href is replaced.
+   *
+   * Runs once at load and rewrites the href (rather than intercepting
+   * the click) so middle-click, open-in-new-tab, and link hover
+   * previews all carry the anchor too.
+   * ============================================================ */
+  document.querySelectorAll("[data-page-anchor]").forEach((link) => {
+    const anchor = (link.getAttribute("data-page-anchor") || "").replace(/^#/, "").trim();
+    if (!anchor) return;
+
+    const href = link.getAttribute("href");
+    if (href === null) return; // no URL to append to
+
+    const base = href.split("#")[0]; // drop any existing hash
+    link.setAttribute("href", `${base}#${anchor}`);
   });
 
 });

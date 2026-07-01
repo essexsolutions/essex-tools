@@ -45,6 +45,8 @@ One file for the Webflow **global** custom code (Before `</body>`). Sections:
 6. `[data-prefilter]` — region subnav prefilter links.
 7. `[data-procat-toggle="submit"]` — build a `/products?…` query from checked filters.
 8. `[data-slide-toggle]` — activate a Webflow native tab by ID (see `slide-toggle.js`).
+9. `[data-page-anchor]` — append `#value` to a link's existing href so it lands
+   on the target page already anchored to that section.
 
 **Load this OR `slide-toggle.js`, not both** — section 8 is the same handler,
 so loading both would fire the tab click twice. For the global settings, use
