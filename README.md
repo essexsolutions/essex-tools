@@ -12,6 +12,12 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
 - `essex-gsap.js` — attribute-driven GSAP animations to sprinkle anywhere.
   First animation: `[data-gsap-counter="<number>"]` counts up when it scrolls
   into view (0.5s default). Needs GSAP core on the page; no ScrollTrigger.
+- `wave-relay.js` — parent-page bridge that relays the mouse into a
+  `pointer-events:none` wave-visualizer iframe via `postMessage`, so its
+  parallax + click-to-reverse interactions keep working from behind the embed.
+  Attribute-configurable (`.iframe-mouse-relay` overlay), single source of truth
+  across pages. Pairs with the visualizer's own `message` listener
+  (`essexsolutions/visualizer`).
 - `ss-slideshow.js` — `.ss_slide_sidenav` slideshow controller: timed auto-advance,
   click-to-switch, default/active icon swap, and an **accumulating**
   `.ss_slidebar--fill` progress bar (active block fills 0→100% over the interval,
@@ -109,6 +115,60 @@ Notes:
 - The ID may sit on either the tab **link** (`.w-tab-link`) or the tab
   **pane** (`.w-tab-pane`) — both resolve to the correct link.
 - `e.preventDefault()` stops links/buttons from jumping or submitting.
+
+## wave-relay.js — drive the wave visualizer from behind the iframe
+
+The wave visualizer (`essexsolutions/visualizer`, mounted at `/wave/`) is
+embedded in an `<iframe>` that carries `pointer-events:none` so the page
+scrolls and clicks straight through it. The trade-off: the iframe never sees
+native mouse events, so its **parallax tilt** and **click-to-reverse-flow**
+interactions go dead. This script is the parent-page half of the fix — a single
+source of truth to drop on any page holding the embed instead of pasting the
+inline snippet each time.
+
+How it works: a transparent overlay (`.iframe-mouse-relay`) sits on top of the
+iframe and *does* receive the mouse. On `mousemove` / `mouseleave` / `click`
+the script forwards a normalized (0–1) pointer to the iframe via `postMessage`.
+The visualizer's own `message` listener (`src/scripts/main.js`) consumes:
+
+```js
+{ source: 'iframe-relay', type: 'mousemove'|'mouseleave'|'click', x, y }
+```
+
+and maps it to parallax (`mousemove`/`mouseleave`) and flow reversal (`click`).
+
+Setup in Webflow:
+1. Add the visualizer `<iframe>` — give it an ID (default `responsive-iframe`)
+   and set `pointer-events:none` in its style.
+2. Add a transparent overlay element on top of it, same size/position, with the
+   class `iframe-mouse-relay` and `pointer-events:auto`.
+3. Load this script (Before `</body>`). The defaults match the original inline
+   snippet, so **no attributes are required**.
+
+Config — set as custom attributes on the `.iframe-mouse-relay` overlay:
+
+| Attribute | Default | Notes |
+| --- | --- | --- |
+| `data-relay-iframe` | `#responsive-iframe` | CSS selector (or bare id) of the iframe to drive |
+| `data-relay-origin` | **auto** (derived from the iframe's `src`, then this page's origin) | `postMessage` targetOrigin — **must equal the origin of the iframe's `src`** or messages are dropped silently. Left unset, the script reads it off the iframe automatically, so it's correct on **`essexsolutions.com`** (production), **`essexsolutions.webflow.io`** (staging), and `localhost` alike. Only set this to pin a specific origin. |
+
+Notes:
+- **Origin is handled automatically — prod and staging both work with no config.**
+  The target origin is derived from the iframe's own `src`, so the same script
+  is correct on production (`https://essexsolutions.com`), Webflow staging
+  (`https://essexsolutions.webflow.io`), and local dev. Relative embeds
+  (`src="/wave/"`) resolve against the parent page's origin, so they're covered
+  too. If the `src` can't be read at all, it falls back to **this page's own
+  origin** (Webflow Cloud serves the visualizer same-origin as the page), which
+  stays correct on both domains — no hardcoded domain to keep in sync. Set
+  `data-relay-origin` only if you deliberately want to lock it to one origin.
+- Multiple embeds on one page: add several `.iframe-mouse-relay` overlays, each
+  with its own `data-relay-iframe`; every overlay is wired independently.
+- Load pinned to a tag, same as the others:
+
+  ```html
+  <script src="https://cdn.jsdelivr.net/gh/essexsolutions/essex-tools@v2.22.0/wave-relay.js"></script>
+  ```
 
 ## essex-email-autofill.js — v2 (server-side lookup)
 
