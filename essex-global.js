@@ -12,6 +12,7 @@
  *   7. Subnav category filters               [data-procat-toggle="submit"]
  *   8. Slide-toggle → Webflow native tabs    [data-slide-toggle]
  *   9. Append URL anchor to links            [data-page-anchor]
+ *  10. Open Webflow lightbox by ID           [data-modal-lightbox]
  */
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -236,6 +237,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const base = href.split("#")[0]; // drop any existing hash
     link.setAttribute("href", `${base}#${anchor}`);
+  });
+
+
+  /* ============================================================
+   * 10. OPEN WEBFLOW LIGHTBOX BY ID  [data-modal-lightbox]
+   * Any element with data-modal-lightbox="<element-id>" opens the
+   * hidden Webflow lightbox that carries that ID, by triggering its
+   * native click. Lets a card/button anywhere open a lightbox it
+   * isn't nested inside. Delegated, so CMS/IX-added triggers work too.
+   * The value may include the leading "#" or not — both work.
+   * ============================================================ */
+  document.addEventListener("click", (e) => {
+    const trigger = e.target.closest("[data-modal-lightbox]");
+    if (!trigger) return;
+    e.preventDefault();
+
+    const id = (trigger.getAttribute("data-modal-lightbox") || "").replace(/^#/, "").trim();
+    if (!id) return;
+
+    const lightbox = document.getElementById(id);
+    if (lightbox) {
+      lightbox.click(); // Webflow's own handler opens the modal
+    } else {
+      console.warn(`[modal-lightbox] no lightbox found for id "#${id}"`);
+    }
   });
 
 });
