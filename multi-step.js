@@ -356,14 +356,19 @@ function saveFilledInput() {
 
 function scrollTop() {
   const _0x186b04 = _0x191e96;
-  scrollToTop &&
-    $(_0x186b04(0x213))[_0x186b04(0x15c)](
-      {
-        scrollTop:
-          $(_0x186b04(0x178))["offset"]()[_0x186b04(0x273)] - scrollTopOffset,
-      },
-      0x3e8,
-    );
+  if (!scrollToTop) return;
+  // Scroll up to the #intro anchor on each step change (so mobile users are
+  // returned to the top after finishing a step). Falls back to the multistep
+  // container if #intro isn't present on the page.
+  var _scrollTarget = $("#intro");
+  if (!_scrollTarget["length"]) _scrollTarget = $(_0x186b04(0x178));
+  $(_0x186b04(0x213))[_0x186b04(0x15c)](
+    {
+      scrollTop:
+        _scrollTarget["offset"]()[_0x186b04(0x273)] - (scrollTopOffset || 0x0),
+    },
+    0x3e8,
+  );
 }
 
 function updateStep() {
