@@ -13,6 +13,8 @@
  *   8. Slide-toggle → Webflow native tabs    [data-slide-toggle]
  *   9. Append URL anchor to links            [data-page-anchor]
  *  10. Open Webflow lightbox by ID           [data-modal-lightbox]
+ *  11. Global search Enter-to-submit         input[data-search="true"]
+ *  12. Mobile smooth scroll-to               [data-mobile-scrollto]
  */
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -261,6 +263,52 @@ document.addEventListener("DOMContentLoaded", () => {
       lightbox.click(); // Webflow's own handler opens the modal
     } else {
       console.warn(`[modal-lightbox] no lightbox found for id "#${id}"`);
+    }
+  });
+
+
+  /* ============================================================
+   * 11. GLOBAL SEARCH ENTER-TO-SUBMIT  input[data-search="true"]
+   * The global search form (method="get" action="/results") submits
+   * fine on button click, but pressing Enter in the field wasn't
+   * triggering the implicit submit. Force it: on Enter, run the same
+   * native submission the Search button does (requestSubmit → GET
+   * redirect, honoring the field's `required` validation). We don't
+   * touch the button path, which already works.
+   * ============================================================ */
+  document.querySelectorAll('form input[data-search="true"]').forEach((input) => {
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+
+      const form = input.closest("form");
+      if (!form) return;
+
+      e.preventDefault(); // cancel the (non-firing) implicit submit
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit(); // same path as clicking Search: validate + GET
+      } else {
+        form.submit(); // legacy fallback (skips constraint validation)
+      }
+    });
+  });
+
+
+  /* ============================================================
+   * 12. MOBILE SMOOTH SCROLL-TO  [data-mobile-scrollto]
+   * Tablet & below only: clicking an element with
+   * data-mobile-scrollto="<element-id>" smooth-scrolls to the element
+   * with that ID. On desktop the trigger keeps its native behavior.
+   * Delegated, so CMS/IX-added triggers work too.
+   * ============================================================ */
+  document.addEventListener("click", (e) => {
+    const trigger = e.target.closest("[data-mobile-scrollto]");
+    if (!trigger) return;
+    if (window.innerWidth > TABLET_BREAKPOINT) return; // tablet & below only
+
+    const target = document.getElementById(trigger.getAttribute("data-mobile-scrollto"));
+    if (target) {
+      e.preventDefault();
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   });
 
