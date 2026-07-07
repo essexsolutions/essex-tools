@@ -15,6 +15,7 @@
  *  10. Open Webflow lightbox by ID           [data-modal-lightbox]
  *  11. Global search Enter-to-submit         input[data-search="true"]
  *  12. Mobile smooth scroll-to               [data-mobile-scrollto]
+ *  13. Lazy-load iframes                      iframe[data-src]
  */
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -310,6 +311,20 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+  });
+
+
+  /* ============================================================
+   * 13. LAZY-LOAD IFRAMES  iframe[data-src]
+   * Defers iframe loading until the page has fully loaded: on window
+   * `load`, swap each iframe's data-src into src so heavy embeds don't
+   * block initial page load. Runs on `load` (not DOMContentLoaded) on
+   * purpose — that's what makes the deferral worthwhile.
+   * ============================================================ */
+  window.addEventListener("load", () => {
+    document.querySelectorAll("iframe[data-src]").forEach((iframe) => {
+      iframe.src = iframe.getAttribute("data-src");
+    });
   });
 
 });
