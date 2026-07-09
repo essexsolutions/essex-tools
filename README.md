@@ -257,6 +257,33 @@ SRI on a cross-origin script needs `crossorigin` to verify):
 Current practice on the Essex site is to load **without** SRI — the tag pin is
 considered enough for these public, secret-free scripts.
 
+### Purging the jsDelivr cache (only needed for `@latest` / branches)
+
+Immutable tags (`@v2.22.0`) **never** need purging — the bytes at that URL can't
+change, so jsDelivr caches them forever and that's the whole point. You only need
+to purge when you load a **floating** ref whose bytes *do* change under the same
+URL: `@latest`, `@main`, or a branch name. jsDelivr caches those at its edge for
+up to 7 days, so a fresh `git push` won't reach the site until the cache is purged.
+
+Purge by hitting `purge.jsdelivr.net` with the exact same path you load — once per
+file:
+
+```sh
+curl https://purge.jsdelivr.net/gh/essexsolutions/essex-tools@latest/essex-global.js
+curl https://purge.jsdelivr.net/gh/essexsolutions/essex-tools@latest/multi-step.js
+```
+
+Each call returns JSON with the refreshed cache status. You can also paste the
+full file URL into the web tool: <https://www.jsdelivr.com/tools/purge>.
+
+Notes:
+- Purge is **per exact URL** — purge every file *and* every floating ref you
+  actually load (`@latest` and `@main` are separate cache entries).
+- It can take a minute or two to propagate across all of jsDelivr's edge nodes.
+- Your browser caches too — hard-refresh (Cmd-Shift-R) after purging to confirm.
+- The clean alternative to purging is to stop using `@latest`: cut a new tag and
+  bump the `@v…` in your embed (see above). New tag = new URL = instant, no purge.
+
 ### Notes
 - Pinning to `@v1.0.0` (or a full commit SHA) means it can never silently
   auto-update the way `@latest` does.
