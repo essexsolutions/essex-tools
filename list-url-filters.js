@@ -202,7 +202,9 @@
 
     if (missed.length) console.warn("[list-url-filters] no match for:", missed);
 
-    syncVisuals();
+    // Deferred for the same reason as in bindWriters: Webflow's delegated
+    // toggle runs after the synthetic change events dispatched above.
+    setTimeout(syncVisuals, 0);
     setTimeout(syncVisuals, 200);
     setTimeout(syncVisuals, 600);
 
@@ -277,13 +279,19 @@
     const form = filtersForm();
     if (!form) return;
 
-    // Checkboxes / radios / selects: immediate.
+    // Checkboxes / radios / selects: immediate URL write, DEFERRED visual
+    // sync. Webflow's own handler for custom checkboxes is a delegated
+    // `change` listener on document that blindly *toggles*
+    // `.w--redirected-checked`. It runs after this form-level listener, so
+    // setting the class synchronously here gets flipped back by Webflow and
+    // the checkmark lags one interaction behind. Waiting one tick lets
+    // Webflow toggle first, then we set the class from the real state.
     form.addEventListener("change", (e) => {
       const el = e.target;
       if (!el || !el.hasAttribute("fs-list-field")) return;
       if (el.type === "text" || el.type === "search") return; // handled below
       writeToURL();
-      syncVisuals();
+      setTimeout(syncVisuals, 0);
     });
 
     // Keyword box: debounced so we don't rewrite on every keystroke.
