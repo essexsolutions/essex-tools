@@ -1,0 +1,57 @@
+name: Purge jsDelivr cache
+
+# jsDelivr caches @latest for up to 7 days. Pinned tags (@vX.Y.Z) are
+# immutable and never need purging. This purges every shipped file at
+# @latest so the site picks up changes immediately.
+#
+# Note: on the /gh/ endpoint, @latest resolves to the newest *tag*, not the
+# main branch. That is why this also runs on tag pushes.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Purge @latest for all shipped files
+        run: |
+          set -euo pipefail
+          repo="essexsolutions/essex-tools"
+
+          paths=()
+          for f in $(git ls-files | grep -E '\.(js|css)$'); do
+            paths+=("/gh/${repo}@latest/${f}")
+          done
+
+          echo "Purging ${#paths[@]} paths:"
+          printf '  %s\n' "${paths[@]}"
+
+          body=$(printf '%s\n' "${paths[@]}" | jq -R . | jq -s '{path: .}')
+          resp=$(curl -sS --fail-with-body -X POST https://purge.jsdelivr.net/ \
+            -H 'content-type: application/json' \
+            -d "$body")
+          echo "$resp"
+
+          id=$(echo "$resp" | jq -r '.id // empty')
+          [ -n "$id" ] || { echo "::error::jsDelivr returned no purge id"; exit 1; }
+
+          # Purges are async; poll the status endpoint until finished.
+          for i in $(seq 1 30); do
+            status=$(curl -sS "https://purge.jsdelivr.net/status/${id}" | jq -r '.status // "unknown"')
+            echo "attempt ${i}: ${status}"
+            case "$status" in
+              finished) exit 0 ;;
+              failed)   echo "::error::purge failed"; exit 1 ;;
+            esac
+            sleep 2
+          done
+          echo "::warning::purge still pending after 60s; it will complete on its own"
