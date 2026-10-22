@@ -7,6 +7,13 @@ Self-hosted front-end scripts for the Essex Solutions Webflow site.
 - `multi-step.js` — beacon-stripped copy of videsigns "Formly" multi-step form helper.
 - `essex-email-autofill.js` / `essex-email-autofill.css` — returning-lead autofill helper.
 - `slide-toggle.js` — `[data-slide-toggle]` triggers that switch Webflow native tabs by ID.
+- `list-url-filters.js` — Finsweet Attributes v2 list filters <-> URL sync for
+  `/products` and `/resources` (any page with an `fs-list-element="filters"`
+  form). Reads the friendly `?region=north-america&temp=200` query on load
+  (same format `essex-global.js` sections 6/7 emit) and writes it back with
+  `history.replaceState` on every filter change, no reload. Filter keys are
+  discovered from the page, nothing to configure. Replaces the inline
+  `[url-filters]` script in the `/products` page custom code.
 - `essex-global.js` — site-wide bundle: navbar/subnav behavior, text limiting,
   prefilters, category filters, **and** the slide-toggle logic in one file.
 - `essex-gsap.js` — attribute-driven GSAP animations to sprinkle anywhere.
@@ -59,6 +66,48 @@ One file for the Webflow **global** custom code (Before `</body>`). Sections:
 **Load this OR `slide-toggle.js`, not both** — section 8 is the same handler,
 so loading both would fire the tab click twice. For the global settings, use
 `essex-global.js` alone.
+
+## list-url-filters.js — Finsweet list filters <-> URL (`/products`, `/resources`)
+
+Both pages filter with **Finsweet Attributes v2** (`fs-list-*`), not Jetboost.
+This file keeps the address bar in step with the filters on any page that has
+an `fs-list-element="filters"` form. It discovers the filter keys from the
+inputs in that form, so the same tagged file serves every list page:
+
+- **Read on load:** `?region=north-america&temp=200&shape=round,rectangular&q=wire`
+  (products) or `?category=product-datasheets&language=french` (resources)
+  checks the matching `fs-list-value` checkboxes (loose match: case, spacing,
+  punctuation and the °C suffix are ignored) and fills the keyword box (`q`).
+  Keys are case-insensitive. Friendly aliases accepted: plurals
+  (`regions`, `categories`, `languages`, `shapes`, `materials`, `applications`,
+  `industries`, `countries`), `temperature`→`temp`, `search`/`keyword`→`q`.
+- **Write on change:** rebuilds the same friendly query from the current filter
+  state and swaps it in with `history.replaceState`. A key disappears when its
+  last value is unchecked or **Clear** is clicked. Keys it does not own
+  (`utm_*`, …) are preserved.
+- Values come from the untranslated `fs-list-value` attributes, so URLs are the
+  same on every Weglot subdomain and copy across languages.
+- Value format mirrors `normalizeValue()` in `essex-global.js` section 7:
+  lower-case, non-alphanumerics → `-`, `temp`/`thermal-class` digits only.
+- Pages without a Finsweet filter form are left untouched, so it is safe in
+  site-wide code too, though page-level loading is recommended.
+
+Load on `/products` and `/resources` (Page Settings → Before `</body>`), pinned
+to a tag:
+
+    <script src="https://cdn.jsdelivr.net/gh/essexsolutions/essex-tools@vX.Y.Z/list-url-filters.js"></script>
+
+On `/products`, **delete the inline `[url-filters]` script** from that same
+page — this file supersedes it (same read behaviour plus the write-back).
+
+**Translated pages still need a Designer change on both pages.** Finsweet
+compares each checkbox's `fs-list-value` against the *text* of the card's
+`fs-list-field` elements, and Weglot translates that text (`North America` →
+`Amérique du Nord`, `French` → `Français`, `200°C` → `200 °C`), so most filters
+return 0 results on `fr-fr.`, `de-de.`, etc. In each Collection Item: move
+`fs-list-field` off the visible tag elements onto hidden siblings bound to the
+same CMS fields, and give those hidden elements `data-wg-notranslate`. Labels
+stay translated; the matched text stays English.
 
 ## essex-gsap.js — attribute-driven GSAP animations
 
