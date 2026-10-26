@@ -1,57 +1,128 @@
 name: Purge jsDelivr cache
 
 # jsDelivr caches @latest for up to 7 days. Pinned tags (@vX.Y.Z) are
-# immutable and never need purging. This purges every shipped file at
-# @latest so the site picks up changes immediately.
+# immutable and never need purging. This purges the JS/CSS files that
+# changed at @latest so the site picks up changes immediately.
 #
-# Note: on the /gh/ endpoint, @latest resolves to the newest *tag*, not the
-# main branch. That is why this also runs on tag pushes.
+# Notes:
+# - On the /gh/ endpoint, @latest resolves to the newest *tag*, not the
+#   main branch. Pushes to main never change what @latest serves, so this
+#   runs only when a tag is pushed (plus a manual trigger).
+# - Only files added, modified or renamed since the previous tag are
+#   purged. Tick "all" on a manual run to purge every shipped file.
+# - jsDelivr throttles purges per path (roughly one per ~30 min). A
+#   throttled path is skipped silently inside an otherwise "finished"
+#   response, with a "throttlingReset" countdown in seconds. This job
+#   waits out that countdown and resubmits only the throttled paths.
 
 on:
   push:
-    branches: [main]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      all:
+        description: 'Purge every shipped file, not just those changed since the previous tag'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+env:
+  # Longest single throttle wait this job will tolerate, in seconds.
+  # Anything beyond this is reported as a warning and left to expire naturally.
+  MAX_THROTTLE_WAIT: 2400
+
 jobs:
   purge:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the previous tag can be found
 
-      - name: Purge @latest for all shipped files
+      - name: Purge @latest for changed files
         run: |
           set -euo pipefail
           repo="essexsolutions/essex-tools"
 
-          paths=()
-          for f in $(git ls-files | grep -E '\.(js|css)$'); do
-            paths+=("/gh/${repo}@latest/${f}")
+          # Base = the previous tag. On a tag push, look back from the tagged
+          # commit's parent so we don't find the tag we just pushed. On a manual
+          # run, the newest tag reachable from HEAD. Empty base = purge everything.
+          base=""
+          if [ "${{ inputs.all }}" != "true" ]; then
+            if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+              base=$(git describe --tags --abbrev=0 'HEAD^' 2>/dev/null || true)
+            else
+              base=$(git describe --tags --abbrev=0 2>/dev/null || true)
+            fi
+          fi
+
+          if [ -n "$base" ]; then
+            echo "JS/CSS changed since ${base}:"
+            mapfile -t files < <(git diff --name-only --diff-filter=AMR "$base" HEAD -- '*.js' '*.css')
+          else
+            echo "No previous tag (or 'all' requested); purging every shipped file."
+            mapfile -t files < <(git ls-files '*.js' '*.css')
+          fi
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "Nothing changed since ${base}. Nothing to purge."
+            exit 0
+          fi
+          printf '  %s\n' "${files[@]}"
+
+          mapfile -t pending < <(printf '%s\n' "${files[@]}" | sed "s#^#/gh/${repo}@latest/#")
+
+          submit_and_wait() {
+            # $@ = paths. Prints the final status JSON on stdout.
+            local body resp id status
+            body=$(printf '%s\n' "$@" | jq -R . | jq -s '{path: .}')
+            resp=$(curl -sS --fail-with-body -X POST https://purge.jsdelivr.net/ \
+              -H 'content-type: application/json' -d "$body")
+            id=$(echo "$resp" | jq -r '.id // empty')
+            [ -n "$id" ] || { echo "::error::jsDelivr returned no purge id: $resp" >&2; return 1; }
+            for _ in $(seq 1 30); do
+              resp=$(curl -sS "https://purge.jsdelivr.net/status/${id}")
+              status=$(echo "$resp" | jq -r '.status // "unknown"')
+              case "$status" in
+                finished) echo "$resp"; return 0 ;;
+                failed)   echo "::error::purge $id failed: $resp" >&2; return 1 ;;
+              esac
+              sleep 2
+            done
+            echo "::warning::purge $id still pending after 60s; treating as done" >&2
+            echo "$resp"
+          }
+
+          attempt=1
+          while [ "${#pending[@]}" -gt 0 ]; do
+            echo "== Attempt ${attempt}: purging ${#pending[@]} path(s)"
+            printf '  %s\n' "${pending[@]}"
+
+            result=$(submit_and_wait "${pending[@]}")
+            echo "$result" | jq .
+
+            # Collect paths jsDelivr throttled, and the longest reset countdown.
+            mapfile -t throttled < <(echo "$result" | jq -r '.paths // {} | to_entries[] | select(.value.throttled == true) | .key')
+            if [ "${#throttled[@]}" -eq 0 ]; then
+              echo "All paths purged."
+              exit 0
+            fi
+
+            reset=$(echo "$result" | jq -r '[.paths // {} | to_entries[] | select(.value.throttled == true) | .value.throttlingReset // 0] | max')
+            echo "${#throttled[@]} path(s) throttled; reset in ${reset}s:"
+            printf '  %s\n' "${throttled[@]}"
+
+            if [ "$reset" -gt "$MAX_THROTTLE_WAIT" ]; then
+              echo "::warning::Throttle reset (${reset}s) exceeds MAX_THROTTLE_WAIT (${MAX_THROTTLE_WAIT}s). Leaving these to expire naturally (up to 7 days): ${throttled[*]}"
+              exit 0
+            fi
+
+            wait=$(( reset + 5 ))
+            echo "Waiting ${wait}s before retrying throttled paths..."
+            sleep "$wait"
+            pending=("${throttled[@]}")
+            attempt=$(( attempt + 1 ))
           done
-
-          echo "Purging ${#paths[@]} paths:"
-          printf '  %s\n' "${paths[@]}"
-
-          body=$(printf '%s\n' "${paths[@]}" | jq -R . | jq -s '{path: .}')
-          resp=$(curl -sS --fail-with-body -X POST https://purge.jsdelivr.net/ \
-            -H 'content-type: application/json' \
-            -d "$body")
-          echo "$resp"
-
-          id=$(echo "$resp" | jq -r '.id // empty')
-          [ -n "$id" ] || { echo "::error::jsDelivr returned no purge id"; exit 1; }
-
-          # Purges are async; poll the status endpoint until finished.
-          for i in $(seq 1 30); do
-            status=$(curl -sS "https://purge.jsdelivr.net/status/${id}" | jq -r '.status // "unknown"')
-            echo "attempt ${i}: ${status}"
-            case "$status" in
-              finished) exit 0 ;;
-              failed)   echo "::error::purge failed"; exit 1 ;;
-            esac
-            sleep 2
-          done
-          echo "::warning::purge still pending after 60s; it will complete on its own"

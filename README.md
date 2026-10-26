@@ -314,8 +314,41 @@ to purge when you load a **floating** ref whose bytes *do* change under the same
 URL: `@latest`, `@main`, or a branch name. jsDelivr caches those at its edge for
 up to 7 days, so a fresh `git push` won't reach the site until the cache is purged.
 
-Purge by hitting `purge.jsdelivr.net` with the exact same path you load — once per
-file:
+Two things to know about `@latest` on the `/gh/` endpoint:
+
+- It resolves to the **newest tag**, not the `main` branch. Pushing to `main`
+  changes nothing at `@latest`; pushing a tag does.
+- jsDelivr throttles purges to roughly **one per path per 30 minutes**. A
+  throttled path is skipped silently inside an otherwise "finished" response.
+  Purging a path you didn't change wastes its slot for the purge you need.
+
+#### Automatic: GitHub Action on tag push
+
+`.github/workflows/purge-jsdelivr.yml` runs whenever a `v*` tag is pushed. It
+diffs the new tag against the previous one and purges `@latest` for every
+`.js`/`.css` file that was **added, modified or renamed** in between. Deleted
+files are skipped, and the job exits early if nothing qualifies. If jsDelivr
+throttles a path, the job waits out the reported reset countdown (up to
+`MAX_THROTTLE_WAIT`, 40 min) and resubmits only the throttled paths.
+
+So the normal release flow needs no manual purge at all:
+
+```sh
+git tag v2.27.0 && git push origin main v2.27.0   # tag push → purge of changed files
+```
+
+Check the run under **Actions → Purge jsDelivr cache**; the log lists the base
+tag, the files it found, and jsDelivr's status JSON per attempt.
+
+**Manual run.** Actions → Purge jsDelivr cache → *Run workflow*. By default it
+diffs `HEAD` against the newest reachable tag. Tick **all** to purge every
+shipped file instead (first release, or when you are not sure what changed).
+
+#### Manual: curl or the web tool
+
+Still the fallback when you load a branch ref (`@main`), need a purge outside a
+tag push, or want to confirm one file by hand. Hit `purge.jsdelivr.net` with the
+exact same path you load — once per file:
 
 ```sh
 curl https://purge.jsdelivr.net/gh/essexsolutions/essex-tools@latest/essex-global.js
@@ -328,6 +361,9 @@ full file URL into the web tool: <https://www.jsdelivr.com/tools/purge>.
 Notes:
 - Purge is **per exact URL** — purge every file *and* every floating ref you
   actually load (`@latest` and `@main` are separate cache entries).
+- A manual purge counts against the same 30-minute per-path throttle as the
+  Action. If you purge a file by hand and then push a tag, the Action's purge of
+  that file may be throttled and have to wait.
 - It can take a minute or two to propagate across all of jsDelivr's edge nodes.
 - Your browser caches too — hard-refresh (Cmd-Shift-R) after purging to confirm.
 - The clean alternative to purging is to stop using `@latest`: cut a new tag and
