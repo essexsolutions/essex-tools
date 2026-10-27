@@ -42,6 +42,14 @@
          produced it, so "North America" reads "Amérique du Nord" on fr-fr.
          No-op in English, where label and value are identical.
 
+     ORDER (after load, and again whenever Weglot rewrites the labels)
+       • The CMS sorts each option list by its English name and Weglot
+         only swaps the label text, so on fr-fr., de-de., … the options
+         sit in English order. Every checkbox group whose English values
+         are alphabetical is re-ordered by its visible label using the
+         page language's collation. Groups with a deliberate order
+         (Shape: Round, Rectangular) are left alone. No-op in English.
+
      WRITE (on every filter change, no reload)
        • Rebuilds the same friendly query string from the current filter
          state and swaps it into the address bar with history.replaceState.
@@ -361,6 +369,90 @@
   }
 
   /* ---------------------------------------------------------------
+   * ORDER: alphabetise option groups in the page language
+   * ------------------------------------------------------------- */
+
+  // Webflow's CMS sort is case- and punctuation-insensitive ("ABS Coils",
+  // "A/C and Heating", "AC Generator"), so the same collation is used to
+  // decide whether a group is alphabetical in English. Only those groups
+  // are re-sorted; the sort key is the visible (translated) label.
+  const COLLATE = { sensitivity: "base", ignorePunctuation: true, numeric: true };
+
+  function pageLang() {
+    const lang = (document.documentElement.getAttribute("lang") || "").trim();
+    return lang || undefined;
+  }
+
+  function isSorted(keys, lang) {
+    for (let i = 1; i < keys.length; i++) {
+      if (keys[i - 1].localeCompare(keys[i], lang, COLLATE) > 0) return false;
+    }
+    return true;
+  }
+
+  // Each group is the element whose children are the option list items.
+  function optionGroups() {
+    const form = filtersForm();
+    if (!form) return [];
+    const groups = new Set();
+    form.querySelectorAll('input[fs-list-field][type="checkbox"], input[fs-list-field][type="radio"]').forEach((inp) => {
+      const item = inp.closest('[role="listitem"]');
+      if (item && item.parentElement) groups.add(item.parentElement);
+    });
+    return Array.from(groups);
+  }
+
+  let sorting = false;
+  function sortOptionGroups() {
+    if (sorting) return;
+    sorting = true;
+    try {
+      const lang = pageLang();
+      optionGroups().forEach((group) => {
+        const items = Array.from(group.children).filter((el) => el.querySelector("input[fs-list-field]"));
+        if (items.length < 2) return;
+
+        const entries = items.map((el) => {
+          const inp = el.querySelector("input[fs-list-field]");
+          const label = el.querySelector(".w-form-label") || el;
+          return { el, value: inputValue(inp).trim(), label: (label.textContent || "").trim() };
+        });
+
+        // English order is the CMS order; only alphabetical groups qualify.
+        if (!isSorted(entries.map((e) => e.value), "en")) return;
+
+        const sorted = entries.slice().sort((a, b) => a.label.localeCompare(b.label, lang, COLLATE));
+        if (sorted.every((e, i) => e.el === items[i])) return; // already in order
+
+        sorted.forEach((e) => group.appendChild(e.el));
+      });
+    } finally {
+      sorting = false;
+    }
+  }
+
+  function bindSorter() {
+    const form = filtersForm();
+    if (!form) return;
+
+    // Weglot translates the labels after load and on in-page language
+    // switches; Finsweet appends the remaining pages of a
+    // fs-list-load="all" group. Both are DOM mutations on the form.
+    let t;
+    new MutationObserver(() => {
+      clearTimeout(t);
+      t = setTimeout(sortOptionGroups, 150);
+    }).observe(form, { childList: true, characterData: true, subtree: true });
+
+    if (window.Weglot && typeof window.Weglot.on === "function") {
+      window.Weglot.on("initialized", () => setTimeout(sortOptionGroups, 100));
+      window.Weglot.on("languageChanged", () => setTimeout(sortOptionGroups, 200));
+    }
+
+    sortOptionGroups();
+  }
+
+  /* ---------------------------------------------------------------
    * TAGS: show the translated label, not the English fs-list-value
    * ------------------------------------------------------------- */
 
@@ -449,6 +541,7 @@
       normalizeCheckboxNames();
       bindWriters();
       bindTagLocalizer();
+      bindSorter();
       applyFromURL();
     },
   ]);
