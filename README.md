@@ -87,6 +87,14 @@ inputs in that form, so the same tagged file serves every list page:
   (`utm_*`, …) are preserved.
 - Values come from the untranslated `fs-list-value` attributes, so URLs are the
   same on every Weglot subdomain and copy across languages.
+- **Translated tags:** Finsweet writes the English `fs-list-value` into the
+  applied-filter bubbles (`fs-list-element="tag-value"`), and Weglot leaves
+  them alone (listing the tag class as a dynamic element or calling
+  `Weglot.refresh()` does nothing). On every render the script rewrites each
+  bubble with the visible, already-translated label of the checkbox that
+  produced it (`North America` → `Amérique du Nord` on `fr-fr.`), handles the
+  `A | B` multi-value form, keeps the raw value in `data-list-value`, and marks
+  the bubble `data-wg-notranslate`. No-op in English, where label = value.
 - Value format mirrors `normalizeValue()` in `essex-global.js` section 7:
   lower-case, non-alphanumerics → `-`, `temp`/`thermal-class` digits only.
 - Pages without a Finsweet filter form are left untouched, so it is safe in

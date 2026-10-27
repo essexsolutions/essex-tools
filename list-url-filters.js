@@ -23,6 +23,13 @@
        • Keeps Webflow's custom checkbox visuals in step with the real
          checked state (Finsweet re-renders can wipe the visual class).
 
+     TAGS  (on every render)
+       • Finsweet writes the English `fs-list-value` into the applied-filter
+         bubbles (`fs-list-element="tag-value"`). On Weglot subdomains the
+         bubble is rewritten with the translated label of the checkbox that
+         produced it, so "North America" reads "Amérique du Nord" on fr-fr.
+         No-op in English, where label and value are identical.
+
      WRITE (on every filter change, no reload)
        • Rebuilds the same friendly query string from the current filter
          state and swaps it into the address bar with history.replaceState.
@@ -322,6 +329,82 @@
   }
 
   /* ---------------------------------------------------------------
+   * TAGS: show the translated label, not the English fs-list-value
+   * ------------------------------------------------------------- */
+
+  // Finsweet renders one tag per field and joins its values with " | ".
+  // The text it writes is the checkbox's `fs-list-value`, which must stay
+  // English for matching to work (see README), so on a Weglot subdomain the
+  // applied-filter bubbles read "North America" next to a checkbox labelled
+  // "Amérique du Nord". Weglot does not pick the bubbles up (not even with
+  // the tag class listed as a dynamic element or via Weglot.refresh()), so
+  // we rewrite each bubble from the visible, already-translated label of
+  // the checkbox that produced it. In English every label equals its value,
+  // so this is a no-op there.
+  const TAG_VALUE_SEP = " | ";
+
+  function labelMap() {
+    const map = {}; // fs-list-value -> visible label text
+    const form = filtersForm();
+    if (!form) return map;
+    form.querySelectorAll('input[fs-list-field][type="checkbox"], input[fs-list-field][type="radio"]').forEach((inp) => {
+      const value = inputValue(inp).trim();
+      if (!value) return;
+      const label = inp.closest("label");
+      const textEl = label && (label.querySelector(".w-form-label") || label);
+      const text = textEl ? textEl.textContent.trim() : "";
+      if (text) map[value] = text;
+    });
+    return map;
+  }
+
+  function localizeTags() {
+    const tags = document.querySelectorAll('[fs-list-element="tag-value"]');
+    if (!tags.length) return;
+    const map = labelMap();
+
+    tags.forEach((el) => {
+      // Finsweet updates an existing bubble in place when a second value
+      // of the same field is ticked, so the current text is the raw
+      // English source unless it is exactly what we wrote last time. Keep
+      // the raw copy so a language change can re-map from the source.
+      const current = el.textContent;
+      let raw = el.getAttribute("data-list-value");
+      if (raw === null || current !== el.getAttribute("data-list-label")) {
+        raw = current.trim();
+        el.setAttribute("data-list-value", raw);
+      }
+      const text = raw
+        .split(TAG_VALUE_SEP)
+        .map((v) => map[v.trim()] || v.trim())
+        .join(TAG_VALUE_SEP);
+      if (current !== text) el.textContent = text;
+      el.setAttribute("data-list-label", text);
+      // Already in the page language; keep Weglot's dynamic pass off it.
+      el.setAttribute("data-wg-notranslate", "true");
+    });
+  }
+
+  function bindTagLocalizer() {
+    // Tags live outside the filters form and Finsweet rebuilds them on
+    // every change, so watch the document rather than one container.
+    // Debounced to one pass per batch; our own text write re-triggers the
+    // observer once and the second pass finds nothing to change.
+    let t;
+    new MutationObserver(() => {
+      clearTimeout(t);
+      t = setTimeout(localizeTags, 0);
+    }).observe(document.body, { childList: true, characterData: true, subtree: true });
+
+    // Weglot re-translates the labels on an in-page language switch.
+    if (window.Weglot && typeof window.Weglot.on === "function") {
+      window.Weglot.on("languageChanged", () => setTimeout(localizeTags, 100));
+    }
+
+    localizeTags();
+  }
+
+  /* ---------------------------------------------------------------
    * Boot: wait for Finsweet's list module, then read + bind.
    * ------------------------------------------------------------- */
 
@@ -332,6 +415,7 @@
       discoverFields();
       if (!Object.keys(CANONICAL).length) return; // no filter form on this page
       bindWriters();
+      bindTagLocalizer();
       applyFromURL();
     },
   ]);
