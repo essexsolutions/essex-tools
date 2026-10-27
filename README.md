@@ -95,6 +95,13 @@ inputs in that form, so the same tagged file serves every list page:
   produced it (`North America` → `Amérique du Nord` on `fr-fr.`), handles the
   `A | B` multi-value form, keeps the raw value in `data-list-value`, and marks
   the bubble `data-wg-notranslate`. No-op in English, where label = value.
+- **One checkbox group per field:** Finsweet reads a checkbox filter's value
+  as every checked checkbox in the form with the same `name`, ignoring
+  `fs-list-field`. Filter groups built from one Webflow component share a
+  name (Shape and Material on `/products` were both `name="Material"`), which
+  pooled their values into one tag bubble (`Round | Aluminum`). At boot every
+  filter checkbox is renamed to its `fs-list-field`. Still give each group a
+  unique checkbox name in the Designer; this is only the guard.
 - Value format mirrors `normalizeValue()` in `essex-global.js` section 7:
   lower-case, non-alphanumerics → `-`, `temp`/`thermal-class` digits only.
 - Pages without a Finsweet filter form are left untouched, so it is safe in

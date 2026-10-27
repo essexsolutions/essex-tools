@@ -23,6 +23,18 @@
        • Keeps Webflow's custom checkbox visuals in step with the real
          checked state (Finsweet re-renders can wipe the visual class).
 
+     NAMES (once, at boot, before anything else)
+       • Finsweet reads a checkbox filter's value as "every checked
+         checkbox in the form with the same `name`", keyed by the input's
+         `name`, NOT by `fs-list-field`. When two filter groups are built
+         from one Webflow component the checkboxes share a name (on
+         /products Shape and Material were both `name="Material"`), so
+         ticking Round then Aluminum produced the bubbles "Round" and
+         "Round | Aluminum". Every filter checkbox is renamed to its
+         `fs-list-field` so each field is its own group. The proper fix is
+         a unique checkbox name per group in the Designer; this is the
+         guard for the next reused component.
+
      TAGS  (on every render)
        • Finsweet writes the English `fs-list-value` into the applied-filter
          bubbles (`fs-list-element="tag-value"`). On Weglot subdomains the
@@ -158,6 +170,26 @@
       const label = inp.closest("label");
       const visual = label && label.querySelector(".w-checkbox-input, .w-radio-input");
       if (visual) visual.classList.toggle("w--redirected-checked", inp.checked);
+    });
+  }
+
+  /* ---------------------------------------------------------------
+   * NAMES: one checkbox group per fs-list-field
+   * ------------------------------------------------------------- */
+
+  // Finsweet Attributes v2 (list module, checkbox branch of its value
+  // reader) collects `input[name="<name>"][type="checkbox"]:checked` across
+  // the whole form and ignores `fs-list-field`. Two groups sharing a
+  // `name` therefore pool their values into one condition / one tag
+  // bubble. Finsweet looks the name up at interaction time, so renaming
+  // here, after its init but before the first change, is enough. Radios
+  // are left alone: their mutual exclusion is name-based by design.
+  function normalizeCheckboxNames() {
+    const form = filtersForm();
+    if (!form) return;
+    form.querySelectorAll('input[type="checkbox"][fs-list-field]').forEach((inp) => {
+      const field = (inp.getAttribute("fs-list-field") || "").trim();
+      if (field && field !== "*" && inp.name !== field) inp.name = field;
     });
   }
 
@@ -414,6 +446,7 @@
     () => {
       discoverFields();
       if (!Object.keys(CANONICAL).length) return; // no filter form on this page
+      normalizeCheckboxNames();
       bindWriters();
       bindTagLocalizer();
       applyFromURL();
