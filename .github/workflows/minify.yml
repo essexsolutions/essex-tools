@@ -1,0 +1,67 @@
+name: Minify src into root
+
+# The files jsDelivr serves live in the repo root; their editable originals
+# live in src/. This rebuilds the root files from src/ on every push to main
+# and commits the result back, so the commit you tag is always minified.
+#
+# Notes:
+# - Pushes made with GITHUB_TOKEN never trigger other workflows, so the
+#   bot's commit cannot loop back into this job.
+# - Running `npm run build` locally before committing makes this a no-op
+#   (nothing to commit). Either way, `git pull` before cutting a tag so the
+#   tag lands on the minified commit, not the one before it.
+# - purge-jsdelivr.yml double-checks on every tag push that the root files
+#   match src/ and fails loudly if they don't.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/build.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/minify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: minify-main
+  cancel-in-progress: false
+
+jobs:
+  minify:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Commit minified files
+        run: |
+          set -euo pipefail
+          # Root-level .js/.css only; ':(glob)' keeps '*' from crossing into src/.
+          git add -- ':(glob)*.js' ':(glob)*.css'
+          if git diff --cached --quiet; then
+            echo "Minified files already up to date. Nothing to commit."
+            exit 0
+          fi
+          changed=$(git diff --cached --name-only | paste -sd ' ' -)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: minify ${changed}" \
+                     -m "Generated from src/ by scripts/build.mjs (${GITHUB_SHA})."
+          # A human push may have landed meanwhile; rebase onto it then push.
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo "Committed: ${changed}"

@@ -2,6 +2,35 @@
 
 Self-hosted front-end scripts for the Essex Solutions Webflow site.
 
+## Layout: edit `src/`, ship the root
+
+- **`src/`** holds the readable, commented originals. This is the only place
+  to edit.
+- **The repo root** holds the minified build of each `src/` file, under the
+  **same file name**, and is what jsDelivr serves at
+  `cdn.jsdelivr.net/gh/essexsolutions/essex-tools@vX.Y.Z/<file>`. Never edit
+  these by hand; every root file starts with a banner saying so.
+- `scripts/build.mjs` (esbuild) regenerates the root from `src/`. It runs
+  automatically in CI (`.github/workflows/minify.yml`) on every push to `main`
+  that touches `src/`, committing the result back as a
+  `chore: minify …` commit. You can also run it locally.
+
+Day-to-day workflow:
+
+```sh
+nvm use && npm install        # once (Node 22, resolves ../.nvmrc)
+# edit src/<file>.js
+npm run build                 # regenerate the root files (optional; CI does it too)
+git add -A && git commit && git push origin main
+git pull                      # pick up CI's "chore: minify" commit, if you skipped the build
+git tag vX.Y.Z && git push origin vX.Y.Z
+```
+
+`npm run check` exits non-zero if any root file is stale. The tag-push workflow
+runs the same check and fails the run if a tag was cut before the minified
+commit landed, so a stale tag can't go unnoticed (tags are immutable on
+jsDelivr, so the fix is always "build, commit, cut a new tag").
+
 ## Files
 
 - `multi-step.js` — beacon-stripped copy of videsigns "Formly" multi-step form helper.
@@ -271,9 +300,13 @@ Original source: `https://cdn.jsdelivr.net/gh/videsigns/webflow-tools@latest/mul
 
 ## How to load these from Webflow safely
 
-1. **Tag an immutable release** (never use `@latest`):
+1. **Tag an immutable release** (never use `@latest`). Make sure the commit you
+   tag already contains the minified root files (`npm run check`, or just
+   `git pull` after pushing so CI's `chore: minify` commit is in):
 
    ```sh
+   git pull
+   npm run check
    git tag v1.0.0
    git push origin v1.0.0
    ```
@@ -305,7 +338,8 @@ SRI on a cross-origin script needs `crossorigin` to verify):
      crossorigin="anonymous"></script>
    ```
 
-   Recompute the hash whenever you tag a new version:
+   Recompute the hash whenever you tag a new version. Hash the **root** (minified)
+   file, since that is what jsDelivr serves, not the `src/` copy:
 
    ```sh
    echo "sha384-$(openssl dgst -sha384 -binary multi-step.js | openssl base64 -A)"
@@ -332,7 +366,8 @@ Two things to know about `@latest` on the `/gh/` endpoint:
 
 #### Automatic: GitHub Action on tag push
 
-`.github/workflows/purge-jsdelivr.yml` runs whenever a `v*` tag is pushed. It
+`.github/workflows/purge-jsdelivr.yml` runs whenever a `v*` tag is pushed. Only
+root-level `.js`/`.css` files are considered (nothing under `src/` is served). It
 diffs the new tag against the previous one and purges `@latest` for every
 `.js`/`.css` file that was **added, modified or renamed** in between. Deleted
 files are skipped, and the job exits early if nothing qualifies. If jsDelivr

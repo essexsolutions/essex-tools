@@ -10,6 +10,12 @@ name: Purge jsDelivr cache
 #   runs only when a tag is pushed (plus a manual trigger).
 # - Only files added, modified or renamed since the previous tag are
 #   purged. Tick "all" on a manual run to purge every shipped file.
+# - Only root-level .js/.css ship (src/ holds the unminified originals and
+#   is never served), so the pathspecs below use ':(glob)' to stay at the
+#   top level.
+# - The verify-minified job fails if the tagged commit's root files don't
+#   match a fresh build of src/ (i.e. someone tagged before the minify
+#   workflow committed, or forgot `npm run build`). Purging still runs.
 # - jsDelivr throttles purges per path (roughly one per ~30 min). A
 #   throttled path is skipped silently inside an otherwise "finished"
 #   response, with a "throttlingReset" countdown in seconds. This job
@@ -34,6 +40,22 @@ env:
   MAX_THROTTLE_WAIT: 2400
 
 jobs:
+  verify-minified:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Root files match a fresh build of src/
+        run: |
+          if ! npm run --silent check; then
+            echo "::error::${GITHUB_REF_NAME} was tagged on a commit whose minified root files are stale. Run 'npm run build', commit, and cut a new tag (tags are immutable on jsDelivr)."
+            exit 1
+          fi
+
   purge:
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -61,10 +83,10 @@ jobs:
 
           if [ -n "$base" ]; then
             echo "JS/CSS changed since ${base}:"
-            mapfile -t files < <(git diff --name-only --diff-filter=AMR "$base" HEAD -- '*.js' '*.css')
+            mapfile -t files < <(git diff --name-only --diff-filter=AMR "$base" HEAD -- ':(glob)*.js' ':(glob)*.css')
           else
             echo "No previous tag (or 'all' requested); purging every shipped file."
-            mapfile -t files < <(git ls-files '*.js' '*.css')
+            mapfile -t files < <(git ls-files -- ':(glob)*.js' ':(glob)*.css')
           fi
 
           if [ "${#files[@]}" -eq 0 ]; then

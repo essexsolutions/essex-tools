@@ -1,0 +1,17 @@
+{
+  "name": "essex-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Front-end scripts for essexsolutions.com. Edit src/, run `npm run build` to regenerate the minified root files that jsDelivr serves.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/build.mjs --check"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.4"
+  }
+}
