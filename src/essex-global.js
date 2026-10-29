@@ -16,6 +16,7 @@
  *  11. Global search Enter-to-submit         input[data-search="true"]
  *  12. Mobile smooth scroll-to               [data-mobile-scrollto]
  *  13. Lazy-load iframes                      iframe[data-src]
+ *  14. Query param from link text            a[data-param-from-text]
  */
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -326,5 +327,95 @@ document.addEventListener("DOMContentLoaded", () => {
       iframe.src = iframe.getAttribute("data-src");
     });
   });
+
+  /* ============================================================
+   * 14. QUERY PARAM FROM LINK TEXT  a[data-param-from-text]
+   * Keeps one query parameter on a link in sync with the link's own
+   * Weglot-translated text, e.g. the footer Terms link:
+   *   <a href="/terms?q=Terms and Conditions" data-param-from-text="q">
+   *     Terms &amp; Conditions
+   *   </a>
+   * On the base language (default `en`; override per link with
+   * data-param-from-text-base="xx") the href is left exactly as
+   * authored, so the English value can differ from the label. On every
+   * other language the named param is replaced with the link's current
+   * visible text, so whatever Weglot shows is what gets sent. Other
+   * params, the path and the hash are preserved. Re-syncs whenever the
+   * link text or <html lang> changes and on Weglot's events, so it
+   * tracks the initial translation and in-page language switches.
+   * ============================================================ */
+  (() => {
+    const links = Array.from(document.querySelectorAll("a[data-param-from-text]"));
+    if (!links.length) return;
+
+    const pageLang = () =>
+      (document.documentElement.getAttribute("lang") || "").trim().toLowerCase();
+
+    const isBaseLang = (link) => {
+      const base = (link.getAttribute("data-param-from-text-base") || "en").trim().toLowerCase();
+      const lang = pageLang();
+      return !lang || lang === base || lang.startsWith(base + "-");
+    };
+
+    const sync = (link) => {
+      const key = (link.getAttribute("data-param-from-text") || "").trim();
+      if (!key) return;
+
+      // Remember the authored href once so every rebuild starts from it.
+      if (link.dataset.paramFromTextHref === undefined) {
+        link.dataset.paramFromTextHref = link.getAttribute("href") || "";
+      }
+      const original = link.dataset.paramFromTextHref;
+
+      if (isBaseLang(link)) {
+        if (link.getAttribute("href") !== original) link.setAttribute("href", original);
+        return;
+      }
+
+      const text = (link.textContent || "").replace(/\s+/g, " ").trim();
+      if (!text) return;
+
+      let url;
+      try {
+        url = new URL(original, window.location.href);
+      } catch {
+        return;
+      }
+      url.searchParams.set(key, text);
+
+      // Keep the authored form: absolute stays absolute, relative stays relative.
+      const next = /^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(original)
+        ? url.href
+        : url.pathname + url.search + url.hash;
+      if (link.getAttribute("href") !== next) link.setAttribute("href", next);
+    };
+
+    const syncAll = () => links.forEach(sync);
+    syncAll();
+
+    // Weglot swaps the text nodes in place; follow every change.
+    const textObserver = new MutationObserver((records) => {
+      const touched = new Set();
+      records.forEach((r) => {
+        const node = r.target.nodeType === Node.ELEMENT_NODE ? r.target : r.target.parentElement;
+        const link = node && node.closest("a[data-param-from-text]");
+        if (link) touched.add(link);
+      });
+      touched.forEach(sync);
+    });
+    links.forEach((link) =>
+      textObserver.observe(link, { childList: true, characterData: true, subtree: true })
+    );
+
+    // Language switches update <html lang>; Weglot also emits events.
+    new MutationObserver(syncAll).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["lang"],
+    });
+    if (window.Weglot && typeof window.Weglot.on === "function") {
+      window.Weglot.on("initialized", () => setTimeout(syncAll, 100));
+      window.Weglot.on("languageChanged", () => setTimeout(syncAll, 200));
+    }
+  })();
 
 });

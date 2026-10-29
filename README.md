@@ -91,6 +91,17 @@ One file for the Webflow **global** custom code (Before `</body>`). Sections:
    on the target page already anchored to that section.
 10. `[data-modal-lightbox]` — open a hidden Webflow lightbox by its element ID
     (`data-modal-lightbox="video-player"` → clicks `#video-player`).
+11. `input[data-search="true"]` — Enter submits the global search form.
+12. `[data-mobile-scrollto]` — tablet-and-below smooth scroll to an element ID.
+13. `iframe[data-src]` — defer iframe loading until window `load`.
+14. `a[data-param-from-text="q"]` — keep one query parameter in sync with the
+    link's own Weglot-translated text. On the base language (default `en`,
+    override with `data-param-from-text-base="xx"`) the authored href is left
+    untouched, so `/terms?q=Terms and Conditions` can sit behind a
+    "Terms & Conditions" label. On every other language the named param is
+    replaced with the link's visible text (URL-encoded); other params, the
+    path and the hash are kept. Re-syncs on text and `<html lang>` changes
+    and on Weglot's `initialized` / `languageChanged` events.
 
 **Load this OR `slide-toggle.js`, not both** — section 8 is the same handler,
 so loading both would fire the tab click twice. For the global settings, use
